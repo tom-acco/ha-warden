@@ -106,16 +106,46 @@ when that breaks:
 
 ## Why successful-login capture is *not* implemented (yet)
 
-There is no equivalent log line or event for successful logins today.
-Getting real data here needs wrapping/subclassing the relevant
-`AuthProvider` class (e.g. `homeassistant.auth.providers.homeassistant.
-HassAuthProvider`) and hooking `async_validate_login`, which is a deeper
-and more version-sensitive integration than log-scraping. Rather than fake
-this with a proxy signal (e.g. "person entity changed to home" - which is
-presence, not authentication, and would be actively misleading in a
-security log), it's left as an explicit `NotImplementedError`-raising stub
-(`AuthProviderHookNotImplemented` in `auth_listener.py`) so the gap is
-visible in code, not just in prose.
+There is no bus event or usable log line for successful logins today
+(verified against HA dev, 2026-07):
+
+- `homeassistant.components.http.ban.process_success_login` logs only at
+  DEBUG and carries no user identity.
+- `homeassistant.components.auth.login_flow` is where success actually
+  happens (user + credential + client + request IP are in scope) but fires
+  no event and writes nothing structured.
+- `AuthManager` fires user add/update/remove events, nothing for login or
+  token creation/use.
+- The "supervisor.auth: Successful login for 'x'" INFO line is emitted by
+  the Supervisor process, not HA core - an in-process log handler can't see
+  it, and it doesn't exist on Container/Core installs. The common
+  `system_log_event` automation recipe depends on it and is therefore
+  fragile and install-type-dependent.
+
+Two real options, deliberately weighed rather than faking it with a proxy
+signal (e.g. "person entity changed to home" - that's presence, not
+authentication, and would be actively misleading in a security log):
+
+1. **Hook an auth provider's `async_validate_login`** (the
+   `AuthProviderHookNotImplemented` stub in `auth_listener.py`). Exact,
+   at-the-moment, with IP - but requires monkeypatching private,
+   provider-specific internals. Poor footing for a security integration and
+   version-fragile.
+2. **Poll refresh tokens** via `hass.auth.async_get_users()` -> each
+   `User.refresh_tokens`. `RefreshToken` exposes `user`, `client_name`,
+   `token_type` (normal / system / long_lived_access_token), `created_at`,
+   `last_used_at`, `last_used_ip`. A new `normal` token = a session was
+   established; a new `long_lived_access_token` = an API token was minted; a
+   known token used from a new `last_used_ip` = activity from a new
+   location. This uses stable-ish public API, no monkeypatching, and is
+   honest that it measures *session/token issuance* (source IP on first
+   use, latency bounded by the poll interval) rather than per-request
+   logins.
+
+Option 2 is the recommended path; option 1 is retained only as an optional
+"instant/exact" enhancement. Left unimplemented for now, with the gap
+visible in code (`AuthProviderHookNotImplemented`) - see docs/ROADMAP.md
+Phase 2.
 
 ## Why anomaly detection is a z-score baseline, not ML
 

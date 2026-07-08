@@ -62,11 +62,24 @@ following it:
 
 ## Phase 2 - close the known functionality gaps
 
-- [ ] **Successful-login capture.** Implement the auth provider hook
-      described in `auth_listener.py`'s docstring
-      (`AuthProviderHookNotImplemented`). This is the single biggest
-      functionality gap versus the original ask ("auth attempts, both
-      failed and successful").
+- [ ] **Successful-login capture.** The single biggest functionality gap
+      versus the original ask ("auth attempts, both failed and
+      successful"). Investigated 2026-07 (see ARCHITECTURE.md and
+      `auth_listener.py`): HA fires no login/token bus event and has no
+      usable in-process success log, so the recommended approach is to
+      **poll refresh tokens** (`hass.auth.async_get_users()` ->
+      `User.refresh_tokens`; RefreshToken carries user / client_name /
+      token_type / created_at / last_used_at / last_used_ip). Log: new
+      `normal` token = session established, new `long_lived_access_token` =
+      API token minted, known token used from a new `last_used_ip` =
+      activity from a new location. The auth-provider `async_validate_login`
+      hook (`AuthProviderHookNotImplemented`) is retained only as an
+      optional "instant/exact" enhancement - it's more precise but
+      monkeypatches private internals, so it's not the primary path.
+- [ ] **Capture the user-agent on failed logins.** The ban-log WARNING now
+      ends with "({user_agent})"; `CURRENT_BAN_MSG_RE` still matches (it
+      stops at the URL) but drops that fingerprint. Extend the regex to
+      capture it.
 - [ ] Dedicated frontend panel (custom Lovelace panel via HA's panel
       registration API) with a searchable/filterable timeline, replacing
       the "call a service and read the response" workflow.
