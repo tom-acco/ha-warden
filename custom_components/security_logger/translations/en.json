@@ -9,7 +9,11 @@
           "monitored_device_classes": "Device classes to monitor (e.g. door, window, motion)",
           "anomaly_enabled": "Enable anomaly detection",
           "anomaly_z_threshold": "Anomaly sensitivity (z-score threshold)",
-          "retention_days": "Retention period (days)"
+          "activity_retention_days": "Keep activity events (device state, user actions) for (days)",
+          "security_retention_days": "Keep security events (auth, anomalies) for (days)",
+          "max_db_size_mb": "Max database size (MB, 0 = no limit)",
+          "buffer_max_events": "Write buffer: flush after this many events",
+          "buffer_flush_seconds": "Write buffer: flush at least every (seconds)"
         }
       }
     }
@@ -24,7 +28,11 @@
           "monitored_device_classes": "Device classes to monitor",
           "anomaly_enabled": "Enable anomaly detection",
           "anomaly_z_threshold": "Anomaly sensitivity (z-score threshold)",
-          "retention_days": "Retention period (days)"
+          "activity_retention_days": "Keep activity events (device state, user actions) for (days)",
+          "security_retention_days": "Keep security events (auth, anomalies) for (days)",
+          "max_db_size_mb": "Max database size (MB, 0 = no limit)",
+          "buffer_max_events": "Write buffer: flush after this many events",
+          "buffer_flush_seconds": "Write buffer: flush at least every (seconds)"
         }
       }
     }

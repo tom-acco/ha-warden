@@ -28,22 +28,34 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .anomaly import AnomalyEngine
 from .auth_listener import setup_ban_log_capture
+from .buffer import WriteBuffer
 from .const import (
     CATEGORY_ANOMALY,
     CATEGORY_STATE,
+    CONF_ACTIVITY_RETENTION_DAYS,
     CONF_ANOMALY_ENABLED,
     CONF_ANOMALY_Z_THRESHOLD,
+    CONF_BUFFER_FLUSH_SECONDS,
+    CONF_BUFFER_MAX_EVENTS,
     CONF_DB_PATH,
+    CONF_MAX_DB_SIZE_MB,
     CONF_MONITORED_DEVICE_CLASSES,
     CONF_MONITORED_DOMAINS,
-    CONF_RETENTION_DAYS,
+    CONF_SECURITY_RETENTION_DAYS,
+    DATA_BUFFER,
     DATA_STORAGE,
     DATA_UNSUB_LISTENERS,
+    DEFAULT_ACTIVITY_RETENTION_DAYS,
     DEFAULT_ANOMALY_Z_THRESHOLD,
+    DEFAULT_BUFFER_FLUSH_SECONDS,
+    DEFAULT_BUFFER_MAX_EVENTS,
+    DEFAULT_MAX_DB_SIZE_MB,
     DEFAULT_MONITORED_DEVICE_CLASSES,
     DEFAULT_MONITORED_DOMAINS,
     DEFAULT_RETENTION_DAYS,
+    DEFAULT_SECURITY_RETENTION_DAYS,
     DOMAIN,
+    RETENTION_TIERS,
     SERVICE_PURGE_OLD,
     SERVICE_QUERY_EVENTS,
     SERVICE_VERIFY_INTEGRITY,
@@ -81,36 +93,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         z_threshold=options.get(CONF_ANOMALY_Z_THRESHOLD, DEFAULT_ANOMALY_Z_THRESHOLD)
     )
 
+    # Buffer writes: rather than one executor job + commit per event, events
+    # accumulate and flush in batches (by count or time). See buffer.py for the
+    # throughput-vs-durability tradeoff. `enqueue` is the fire-and-forget hook
+    # the listeners call.
+    buffer = WriteBuffer(
+        hass,
+        storage,
+        max_events=options.get(CONF_BUFFER_MAX_EVENTS, DEFAULT_BUFFER_MAX_EVENTS),
+        flush_seconds=options.get(
+            CONF_BUFFER_FLUSH_SECONDS, DEFAULT_BUFFER_FLUSH_SECONDS
+        ),
+    )
+    buffer.start()
+    enqueue = buffer.add
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         DATA_STORAGE: storage,
+        DATA_BUFFER: buffer,
         "anomaly_engine": anomaly_engine,
     }
-
-    def enqueue(event: LogEvent) -> None:
-        """Write an event without blocking the event loop.
-
-        Fire-and-forget from listener callbacks: schedule the blocking
-        sqlite write on the executor. If you need back-pressure handling
-        for very high event volumes, put a bounded asyncio.Queue in front
-        of this - left simple here since typical home security event
-        volume is low (see docs/ARCHITECTURE.md, "Scaling considerations").
-
-        The write future is otherwise discarded, so a failed append would
-        vanish silently (a dropped event in a *security* log). Attach a
-        callback that logs any exception instead.
-        """
-        future = hass.async_add_executor_job(storage.append, event)
-
-        def _log_write_error(fut) -> None:
-            exc = fut.exception()
-            if exc is not None:
-                _LOGGER.error(
-                    "Security Logger: failed to persist %s/%s event: %s",
-                    event.category, event.event_type, exc,
-                )
-
-        future.add_done_callback(_log_write_error)
 
     unsub_listeners: list = []
     unsub_listeners.append(setup_action_listener(hass, enqueue))
@@ -146,6 +149,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             _setup_anomaly_polling(hass, storage, anomaly_engine, enqueue)
         )
 
+    unsub_listeners.append(_setup_retention(hass, storage, options))
+
     hass.data[DOMAIN][entry.entry_id][DATA_UNSUB_LISTENERS] = unsub_listeners
 
     _register_services(hass)
@@ -162,6 +167,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     data = hass.data[DOMAIN].pop(entry.entry_id)
     for unsub in data[DATA_UNSUB_LISTENERS]:
         unsub()
+    # Flush anything still buffered before the DB goes away, or those events
+    # are lost.
+    await data[DATA_BUFFER].async_shutdown()
     await hass.async_add_executor_job(data[DATA_STORAGE].close)
 
     # Services are registered once and shared across entries; tear them down
@@ -212,6 +220,44 @@ def _setup_anomaly_polling(hass, storage: SecurityStorage, engine: AnomalyEngine
                 )
 
     return async_track_time_interval(hass, _tick, timedelta(hours=1))
+
+
+def _setup_retention(hass: HomeAssistant, storage: SecurityStorage, options: dict):
+    """Enforce retention once a day: per-category age limits (two tiers) plus a
+    hard size-cap backstop. This is what actually bounds disk growth - without
+    it retention_days was only a default for the manual purge service and the
+    DB grew unbounded. See docs/ARCHITECTURE.md ("Retention")."""
+    activity_days = options.get(
+        CONF_ACTIVITY_RETENTION_DAYS, DEFAULT_ACTIVITY_RETENTION_DAYS
+    )
+    security_days = options.get(
+        CONF_SECURITY_RETENTION_DAYS, DEFAULT_SECURITY_RETENTION_DAYS
+    )
+    policy = {
+        category: (activity_days if tier == "activity" else security_days)
+        for category, tier in RETENTION_TIERS.items()
+    }
+    max_bytes = (
+        options.get(CONF_MAX_DB_SIZE_MB, DEFAULT_MAX_DB_SIZE_MB) * 1024 * 1024
+    )
+
+    async def _tick(_now) -> None:
+        def _run():
+            # Keep unknown categories to the longer (security) window rather
+            # than deleting data we don't have a rule for.
+            by_age = storage.enforce_retention(policy, default_days=security_days)
+            by_size = storage.enforce_size_cap(max_bytes)
+            return by_age, by_size
+
+        by_age, by_size = await hass.async_add_executor_job(_run)
+        if by_age or by_size:
+            _LOGGER.info(
+                "Security Logger retention: %s purged by age, %d by size cap",
+                by_age or "nothing",
+                by_size,
+            )
+
+    return async_track_time_interval(hass, _tick, timedelta(days=1))
 
 
 def _get_storage(hass: HomeAssistant) -> SecurityStorage:

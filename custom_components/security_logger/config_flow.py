@@ -14,17 +14,25 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import (
+    CONF_ACTIVITY_RETENTION_DAYS,
     CONF_ANOMALY_ENABLED,
     CONF_ANOMALY_Z_THRESHOLD,
+    CONF_BUFFER_FLUSH_SECONDS,
+    CONF_BUFFER_MAX_EVENTS,
     CONF_DB_PATH,
+    CONF_MAX_DB_SIZE_MB,
     CONF_MONITORED_DEVICE_CLASSES,
     CONF_MONITORED_DOMAINS,
-    CONF_RETENTION_DAYS,
+    CONF_SECURITY_RETENTION_DAYS,
+    DEFAULT_ACTIVITY_RETENTION_DAYS,
     DEFAULT_ANOMALY_Z_THRESHOLD,
+    DEFAULT_BUFFER_FLUSH_SECONDS,
+    DEFAULT_BUFFER_MAX_EVENTS,
     DEFAULT_DB_FILENAME,
+    DEFAULT_MAX_DB_SIZE_MB,
     DEFAULT_MONITORED_DEVICE_CLASSES,
     DEFAULT_MONITORED_DOMAINS,
-    DEFAULT_RETENTION_DAYS,
+    DEFAULT_SECURITY_RETENTION_DAYS,
     DOMAIN,
 )
 
@@ -81,10 +89,38 @@ def _schema(defaults: dict[str, Any]) -> vol.Schema:
                     CONF_ANOMALY_Z_THRESHOLD, DEFAULT_ANOMALY_Z_THRESHOLD
                 ),
             ): vol.Coerce(float),
+            # Retention: two tiers (activity = high-volume/low-value, expire
+            # fast; security = keep long) plus a hard size-cap backstop.
             vol.Required(
-                CONF_RETENTION_DAYS,
-                default=defaults.get(CONF_RETENTION_DAYS, DEFAULT_RETENTION_DAYS),
-            ): vol.Coerce(int),
+                CONF_ACTIVITY_RETENTION_DAYS,
+                default=defaults.get(
+                    CONF_ACTIVITY_RETENTION_DAYS, DEFAULT_ACTIVITY_RETENTION_DAYS
+                ),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+            vol.Required(
+                CONF_SECURITY_RETENTION_DAYS,
+                default=defaults.get(
+                    CONF_SECURITY_RETENTION_DAYS, DEFAULT_SECURITY_RETENTION_DAYS
+                ),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+            vol.Required(
+                CONF_MAX_DB_SIZE_MB,
+                default=defaults.get(CONF_MAX_DB_SIZE_MB, DEFAULT_MAX_DB_SIZE_MB),
+            ): vol.All(vol.Coerce(int), vol.Range(min=0)),  # 0 disables
+            # Write buffer (throughput vs. durability): flush when either the
+            # event count or the interval is hit.
+            vol.Required(
+                CONF_BUFFER_MAX_EVENTS,
+                default=defaults.get(
+                    CONF_BUFFER_MAX_EVENTS, DEFAULT_BUFFER_MAX_EVENTS
+                ),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1)),
+            vol.Required(
+                CONF_BUFFER_FLUSH_SECONDS,
+                default=defaults.get(
+                    CONF_BUFFER_FLUSH_SECONDS, DEFAULT_BUFFER_FLUSH_SECONDS
+                ),
+            ): vol.All(vol.Coerce(int), vol.Range(min=1)),
         }
     )
 
