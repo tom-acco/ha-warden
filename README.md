@@ -23,9 +23,15 @@ Logbook doesn't give you.
   existing ban-log warnings, giving you source IP and requested URL.
 - **Anomaly detection** - a simple, explainable per-entity/per-hour
   frequency baseline that flags statistically unusual activity.
-- **Tamper-evident storage** - every log row is hash-chained; a
-  `verify_integrity` service recomputes the chain and tells you if/where
-  it's been altered.
+- **Tamper-evident storage** - rows are hash-chained *per category*; a
+  `verify_integrity` service recomputes the chains and reports, per category,
+  the verifiable range and whether it's been altered.
+- **Bounded, tiered retention** - a daily job auto-expires events on a
+  two-tier schedule (high-volume activity like device state expires fast;
+  security events like auth failures and anomalies are kept long) with a
+  hard database-size backstop, so the log doesn't grow without limit.
+- **Buffered writes** - events are batched in memory and flushed together
+  (by count or time), rather than one database commit per event.
 - Three sensors (`Failed Auth Attempts (24h)`, `Detected Anomalies (24h)`,
   `User Actions (24h)`) and three services (`query_events`,
   `verify_integrity`, `purge_old`) for interacting with the log.
@@ -48,7 +54,8 @@ custom_components/security_logger/   The actual HA integration
   manifest.json       HA integration manifest
   const.py             Config keys, defaults, event category constants
   config_flow.py       UI setup + options flow
-  storage.py            Hash-chained SQLite storage layer
+  storage.py            Per-category hash-chained SQLite storage + retention
+  buffer.py             In-memory write buffer (batches events before persisting)
   anomaly.py            Per-entity baseline / z-score anomaly detection
   history.py            Rebuilds anomaly baselines from the log on startup
   event_listener.py    Service-call + state-change listeners (user actions, device state)
@@ -88,9 +95,21 @@ running against a local HA instance in a virtualenv/devcontainer.
   it tells you if historical rows were altered after the fact; it does not
   stop someone with filesystem access from editing the DB. Pair it with
   normal file permission hygiene and backups.
-- `purge_old` intentionally breaks the from-genesis verifiability of the
-  chain for remaining rows once older ones are deleted. If you need both
-  pruning and long-term audit retention, export+archive before purging.
+- **Retention re-anchors the chains, and that's expected.** Any purge
+  (the daily retention job, the size-cap backstop, or the manual
+  `purge_old` service) deletes the oldest rows of a category, so the
+  surviving chain no longer links back to genesis. `verify_integrity`
+  reports this as `anchored_to_genesis: false`, *not* as tampering, and
+  each purge is itself recorded as an auditable `maintenance` event. It
+  still can't detect deletion of the very oldest rows - if you need
+  tamper-evidence across purges, export+archive (or publish a checkpoint
+  hash off-box) before pruning. See `docs/ARCHITECTURE.md`.
+- **Storage/flash wear.** The log writes continuously (batched, but still
+  a steady stream on a busy install). On an SSD this is a non-issue; on a
+  Raspberry Pi running from an **SD card or eMMC**, sustained writes
+  accelerate flash wear. If that's your setup, narrow the monitored
+  domains/device classes, keep retention modest, and consider putting the
+  database on external/USB-SSD storage via the `db_path` option.
 
 ## License
 

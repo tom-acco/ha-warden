@@ -49,6 +49,63 @@ notification), so a wholesale replacement is at least detectable by
 comparing to that external record. Noted as a Phase 3 idea in ROADMAP.md,
 not implemented.
 
+**One chain per category, not one global chain.** `prev_hash` is the
+row_hash of the previous row *in the same category*. This exists to make
+tiered retention (below) possible: with a single global chain, deleting old
+high-volume `device_state` rows from the middle would break the `prev_hash`
+link for every later row of *every* category, so you could never both prune
+noise and keep the chain verifiable. Per-category chains decouple that -
+expiring old `device_state` re-anchors only the `device_state` chain and
+leaves the `auth` chain fully verifiable. `verify_chain` therefore reports
+state *per category*: the verifiable row range, whether it's internally
+consistent, and whether it still anchors to genesis. After a legitimate
+purge the earliest surviving row no longer links to genesis; that is
+reported as `anchored_to_genesis: false`, deliberately distinct from a
+consistency break (tampering).
+
+## Retention: two tiers plus a size backstop
+
+The log's volume and its value are inversely correlated: `device_state`
+changes and routine `user_action` service calls dominate the row count but
+are individually low-value, while the events you want to keep for a long
+time - failed auth, anomalies - are rare. So retention is **two-tier**: an
+"activity" window (short, for the high-volume categories) and a "security"
+window (long, for auth/anomaly/maintenance). A daily job enforces both
+per-category age limits. Nothing enforced retention automatically before
+this - `retention_days` was only the default for the manual `purge_old`
+service, so the database grew without bound; that was the single most
+consequential risk for a live install.
+
+Time-based limits don't *bound* size if volume spikes, so there's also a
+hard **size-cap backstop**: if the DB exceeds `max_db_size_mb` it deletes
+oldest-first until back under. It's a safety net, not the primary policy -
+oldest-first can evict security-relevant rows during a flood of noise, which
+is why the age tiers do the real work.
+
+SQLite doesn't return space to the OS on `DELETE` on its own, so the DB is
+opened with `auto_vacuum=INCREMENTAL` and purges checkpoint the WAL and run
+an incremental vacuum - otherwise "size cap" wouldn't actually shrink the
+file. Every purge (age, size, or manual) is written back into the log as a
+`maintenance`/`purge` event, so a deletion is itself auditable rather than a
+silent gap.
+
+## Write buffering: throughput vs. durability
+
+Writing one row per event means one SQLite commit - and an fsync - per
+service call and monitored state change, each as its own executor job. On a
+busy install that pressures the shared executor pool and hammers the disk.
+Events are instead accumulated in an in-memory buffer and flushed in a
+single batched transaction (`append_batch`) when either a count threshold or
+a time interval is reached, whichever comes first.
+
+The cost is **durability**: events sitting in the buffer are lost if the
+process is hard-killed before a flush. For a security log that's a real
+tradeoff, so it's bounded deliberately - a short default flush interval, a
+count trigger, and a flush on unload - rather than left open-ended. Both
+thresholds are configurable, so an operator can trade latency for durability
+(flush every event) or the reverse. The batch still chains each event
+correctly per category because the write is one serialized transaction.
+
 ## Why we don't log credential contents
 
 For failed logins specifically: it's tempting to log "what was entered"
@@ -193,14 +250,17 @@ completes.
 ## Scaling considerations
 
 Typical home security event volume (door/lock/motion/service-calls) is low
-- tens to low hundreds of events/day for most homes. The current design
-(SQLite, `hass.async_add_executor_job` per write, no in-memory queue) is
-sized for that. If you're building for a much larger install (many
-cameras firing motion events per minute, commercial deployment, etc.), you
-would want to: batch writes, add a bounded `asyncio.Queue` in front of the
-executor calls in `__init__.py`'s `enqueue()` so a burst can't back up the
-event loop, and consider Postgres over SQLite for concurrent-write
-throughput. Not implemented, since it would add complexity most users
+- tens to low hundreds of events/day for most homes. Writes go through the
+in-memory buffer (see "Write buffering") and land as batched transactions,
+which keeps per-event executor/commit overhead off the hot path even when a
+burst arrives. Retention plus the size cap bound how large the database
+gets. For a much larger install (many cameras firing motion events per
+minute, commercial deployment), the remaining levers would be: raise the
+buffer thresholds, and consider Postgres over SQLite for concurrent-write
+throughput. The buffer is unbounded in principle (it warns rather than drops,
+since dropping a security event is worse than the memory cost) - a truly
+adversarial event volume would want a bounded queue with an explicit
+overflow policy. Not implemented, since it would add complexity most users
 don't need - see ROADMAP.md if this becomes a real bottleneck for someone.
 
 ## Packaging: integration, not add-on

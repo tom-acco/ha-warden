@@ -38,6 +38,27 @@ following it:
       `outcome` filter so the failed-auth tile counts failures only,
       OptionsFlow deprecation.
 
+## Phase 0.2 - retention & write path (done)
+
+- [x] **Automatic, bounded retention.** Nothing enforced retention before
+      this - `retention_days` was only the manual purge default, so the DB
+      grew without limit (the biggest risk for a live install). Added a
+      daily job with **two-tier per-category** age limits (activity =
+      device_state/user_action, expire fast; security = auth/anomaly/
+      maintenance, keep long) plus a hard **size-cap backstop**
+      (`max_db_size_mb`), with `auto_vacuum=INCREMENTAL` so the file
+      actually shrinks.
+- [x] **Per-category hash chains.** Required to make selective/tiered
+      retention compatible with tamper-evidence: a single global chain
+      would break every later row when old device_state rows were deleted
+      from the middle. `verify_integrity` now reports per-category range +
+      `anchored_to_genesis`, and purges are logged as auditable
+      `maintenance` events so a legitimate purge isn't mistaken for
+      tampering.
+- [x] **Buffered writes.** Events batch in memory and flush by count or
+      time (`append_batch`, one commit per flush) instead of one commit per
+      event; flushed on unload. Documented durability tradeoff.
+
 **Not yet done, and worth doing before calling this "v1":**
 - [ ] Actually run it inside a live HA instance (devcontainer or HA OS VM)
       end to end - this scaffold has been syntax-checked and had its
@@ -103,10 +124,13 @@ following it:
       misses things people care about in practice. Don't add ML for its
       own sake; see ARCHITECTURE.md's rationale for why v1 deliberately
       avoids it.
-- [ ] Bounded async queue in front of storage writes if a real deployment
-      shows event-loop back-pressure under high event volume (see
-      "Scaling considerations" in ARCHITECTURE.md) - not needed for
-      typical home event volumes.
+- [ ] Bound the write buffer with an explicit overflow policy. The buffer
+      (Phase 0.2) batches writes but is unbounded - it warns rather than
+      drops, since dropping a security event is worse than the memory cost.
+      An adversarial event volume would want a hard cap with a defined
+      overflow behaviour (spill to disk? drop with a recorded gap marker?).
+      Not needed for typical home volumes; see "Scaling considerations" in
+      ARCHITECTURE.md.
 
 ## Explicitly out of scope for this project
 
