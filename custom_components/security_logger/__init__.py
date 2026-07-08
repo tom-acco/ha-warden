@@ -28,6 +28,8 @@ from homeassistant.helpers.event import async_track_time_interval
 from .anomaly import AnomalyEngine
 from .auth_listener import setup_ban_log_capture
 from .const import (
+    CATEGORY_ANOMALY,
+    CATEGORY_STATE,
     CONF_ANOMALY_ENABLED,
     CONF_ANOMALY_Z_THRESHOLD,
     CONF_DB_PATH,
@@ -46,6 +48,7 @@ from .const import (
     SERVICE_VERIFY_INTEGRITY,
 )
 from .event_listener import setup_action_listener, setup_state_listener
+from .history import reconstruct_hourly_observations
 from .storage import LogEvent, SecurityStorage
 
 _LOGGER = logging.getLogger(__name__)
@@ -111,6 +114,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_listeners.append(setup_ban_log_capture(enqueue))
 
     if anomaly_enabled:
+        # Baselines are in-memory; warm them from persisted history so a
+        # restart doesn't reset detection to cold. See _reconstruct_hourly_
+        # observations and AnomalyEngine.warm_from_history.
+        observations = await hass.async_add_executor_job(
+            reconstruct_hourly_observations, storage
+        )
+        applied = anomaly_engine.warm_from_history(observations)
+        if applied:
+            _LOGGER.debug(
+                "Security Logger: warmed anomaly baselines from %d historical "
+                "hourly observations",
+                applied,
+            )
         unsub_listeners.append(
             _setup_anomaly_polling(hass, storage, anomaly_engine, enqueue)
         )
@@ -142,7 +158,7 @@ def _setup_anomaly_polling(hass, storage: SecurityStorage, engine: AnomalyEngine
         hour_of_day = time.localtime(hour_ago).tm_hour
 
         def _tally() -> dict[str, int]:
-            rows = storage.query(category="device_state", since=hour_ago, until=now, limit=10000)
+            rows = storage.query(category=CATEGORY_STATE, since=hour_ago, until=now, limit=10000)
             counts: dict[str, int] = {}
             for row in rows:
                 eid = row.get("entity_id")
@@ -161,7 +177,7 @@ def _setup_anomaly_polling(hass, storage: SecurityStorage, engine: AnomalyEngine
                 )
                 enqueue(
                     LogEvent(
-                        category="anomaly",
+                        category=CATEGORY_ANOMALY,
                         event_type="anomalous_frequency",
                         entity_id=entity_id,
                         data=result,

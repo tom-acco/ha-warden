@@ -17,6 +17,11 @@ DEFAULT_MONITORED_DEVICE_CLASSES = ["door", "window", "motion", "garage_door"]
 DEFAULT_ANOMALY_Z_THRESHOLD = 3.0
 DEFAULT_RETENTION_DAYS = 365
 
+# How far back to replay device_state history to warm anomaly baselines on
+# startup. 30 days gives well over the engine's min_samples (8) per
+# hour-of-day bucket while bounding the reconstruction scan.
+ANOMALY_HISTORY_LOOKBACK_DAYS = 30
+
 # --- Internal hass.data keys -------------------------------------------------
 DATA_STORAGE = "storage"
 DATA_UNSUB_LISTENERS = "unsub_listeners"

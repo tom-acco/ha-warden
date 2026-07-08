@@ -13,7 +13,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Iterable, Optional
 
 
 @dataclass
@@ -86,6 +86,27 @@ class AnomalyEngine:
         if entity_id not in self._baselines:
             self._baselines[entity_id] = EntityBaseline(entity_id=entity_id)
         return self._baselines[entity_id]
+
+    def warm_from_history(
+        self, observations: Iterable[tuple[str, int, int]]
+    ) -> int:
+        """Seed baselines from past (entity_id, hour_of_day, count)
+        observations *without* flagging anything, and return how many were
+        applied.
+
+        Baselines live only in memory, so without this every Home Assistant
+        restart reset them to cold - and with min_samples=8 that means ~8
+        days of uptime before anything can be flagged again. Since HA is
+        commonly restarted more often than that, detection would in practice
+        almost never fire. Rehydrating from the persisted event log on
+        startup (see __init__.py) closes that gap. Feed observations in
+        chronological order so the rolling baseline matches the live path.
+        """
+        applied = 0
+        for entity_id, hour_of_day, count in observations:
+            self._get_baseline(entity_id).observe_count(hour_of_day, float(count))
+            applied += 1
+        return applied
 
     def record_period(
         self, entity_id: str, hour_of_day: int, count_in_period: int

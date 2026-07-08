@@ -12,14 +12,10 @@ import sys
 import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
-sys.path.insert(
-    0,
-    os.path.join(
-        os.path.dirname(__file__), "..", "custom_components", "security_logger"
-    ),
-)
+sys.path.insert(0, os.path.dirname(__file__))
+import conftest  # noqa: F401,E402  (registers the security_logger package)
 
-from storage import SecurityStorage, LogEvent  # noqa: E402
+from security_logger.storage import SecurityStorage, LogEvent  # noqa: E402
 
 
 def _fresh_storage() -> SecurityStorage:
