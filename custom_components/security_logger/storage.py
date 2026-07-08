@@ -20,6 +20,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -81,6 +82,14 @@ class SecurityStorage:
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = str(db_path)
         self._conn: Optional[sqlite3.Connection] = None
+        # Serializes access to the single shared connection. HA's executor is
+        # a multi-threaded pool and we open with check_same_thread=False, so
+        # two writes can otherwise run concurrently. For append() specifically
+        # that is a correctness bug, not just a sqlite-threading one: the
+        # read-last-hash -> insert sequence is a read-modify-write, and two
+        # interleaved appends would read the same prev_hash and fork the
+        # chain, making verify_chain() report tampering that never happened.
+        self._lock = threading.Lock()
 
     # -- lifecycle ------------------------------------------------------
     def open(self) -> None:
@@ -106,47 +115,53 @@ class SecurityStorage:
         return row[0] if row else GENESIS_HASH
 
     def append(self, event: LogEvent) -> int:
-        """Append one event to the chain. Returns the new row id."""
-        assert self._conn is not None
-        prev_hash = self._last_hash()
-        payload = {
-            "ts": event.ts,
-            "category": event.category,
-            "event_type": event.event_type,
-            "user_id": event.user_id,
-            "source_ip": event.source_ip,
-            "entity_id": event.entity_id,
-            "domain": event.domain,
-            "outcome": event.outcome,
-            "data": event.data,
-        }
-        row_hash = hashlib.sha256(
-            (prev_hash + _canonical(payload)).encode("utf-8")
-        ).hexdigest()
+        """Append one event to the chain. Returns the new row id.
 
-        cur = self._conn.execute(
-            """
-            INSERT INTO events
-                (ts, category, event_type, user_id, source_ip, entity_id,
-                 domain, outcome, data, prev_hash, row_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                event.ts,
-                event.category,
-                event.event_type,
-                event.user_id,
-                event.source_ip,
-                event.entity_id,
-                event.domain,
-                event.outcome,
-                _canonical(event.data),
-                prev_hash,
-                row_hash,
-            ),
-        )
-        self._conn.commit()
-        return cur.lastrowid
+        The whole read-last-hash -> hash -> insert -> commit sequence is held
+        under self._lock so it is atomic with respect to other appends; see
+        __init__ for why forking the chain would otherwise be possible.
+        """
+        assert self._conn is not None
+        with self._lock:
+            prev_hash = self._last_hash()
+            payload = {
+                "ts": event.ts,
+                "category": event.category,
+                "event_type": event.event_type,
+                "user_id": event.user_id,
+                "source_ip": event.source_ip,
+                "entity_id": event.entity_id,
+                "domain": event.domain,
+                "outcome": event.outcome,
+                "data": event.data,
+            }
+            row_hash = hashlib.sha256(
+                (prev_hash + _canonical(payload)).encode("utf-8")
+            ).hexdigest()
+
+            cur = self._conn.execute(
+                """
+                INSERT INTO events
+                    (ts, category, event_type, user_id, source_ip, entity_id,
+                     domain, outcome, data, prev_hash, row_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event.ts,
+                    event.category,
+                    event.event_type,
+                    event.user_id,
+                    event.source_ip,
+                    event.entity_id,
+                    event.domain,
+                    event.outcome,
+                    _canonical(event.data),
+                    prev_hash,
+                    row_hash,
+                ),
+            )
+            self._conn.commit()
+            return cur.lastrowid
 
     # -- reads --------------------------------------------------------------
     def query(
@@ -187,10 +202,12 @@ class SecurityStorage:
             LIMIT ?
         """
         params.append(limit)
-        cur = self._conn.execute(sql, params)
-        cols = [c[0] for c in cur.description]
+        with self._lock:
+            cur = self._conn.execute(sql, params)
+            cols = [c[0] for c in cur.description]
+            rows = cur.fetchall()
         results = []
-        for row in cur.fetchall():
+        for row in rows:
             record = dict(zip(cols, row))
             record["data"] = json.loads(record["data"])
             results.append(record)
@@ -203,16 +220,18 @@ class SecurityStorage:
         Returns a dict: {"ok": bool, "checked": int, "broken_at_id": int|None}
         """
         assert self._conn is not None
-        cur = self._conn.execute(
-            """
-            SELECT id, ts, category, event_type, user_id, source_ip,
-                   entity_id, domain, outcome, data, prev_hash, row_hash
-            FROM events ORDER BY id ASC
-            """
-        )
+        with self._lock:
+            cur = self._conn.execute(
+                """
+                SELECT id, ts, category, event_type, user_id, source_ip,
+                       entity_id, domain, outcome, data, prev_hash, row_hash
+                FROM events ORDER BY id ASC
+                """
+            )
+            rows = cur.fetchall()
         expected_prev = GENESIS_HASH
         checked = 0
-        for row in cur.fetchall():
+        for row in rows:
             (
                 row_id, ts, category, event_type, user_id, source_ip,
                 entity_id, domain, outcome, data, prev_hash, row_hash,
@@ -251,6 +270,7 @@ class SecurityStorage:
         behavior - see docs/ARCHITECTURE.md.
         """
         assert self._conn is not None
-        cur = self._conn.execute("DELETE FROM events WHERE ts < ?", (cutoff_ts,))
-        self._conn.commit()
-        return cur.rowcount
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM events WHERE ts < ?", (cutoff_ts,))
+            self._conn.commit()
+            return cur.rowcount
