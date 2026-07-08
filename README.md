@@ -50,11 +50,14 @@ custom_components/security_logger/   The actual HA integration
   config_flow.py       UI setup + options flow
   storage.py            Hash-chained SQLite storage layer
   anomaly.py            Per-entity baseline / z-score anomaly detection
+  history.py            Rebuilds anomaly baselines from the log on startup
   event_listener.py    Service-call + state-change listeners (user actions, device state)
   auth_listener.py      Failed-auth capture via HA's ban logger
   sensor.py              Rolling 24h count sensors
   services.yaml          Service definitions (shows up in HA's UI)
   strings.json / translations/en.json   Config flow UI text
+tests/                  Pure-Python tests for storage/anomaly/history
+                        (no HA runtime needed: `pytest tests/`)
 docs/
   ARCHITECTURE.md      Design rationale, tradeoffs, what's log-scraped vs. API-based
   ROADMAP.md           Phased plan, what's done / next / later

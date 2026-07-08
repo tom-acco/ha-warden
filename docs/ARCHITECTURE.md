@@ -145,6 +145,21 @@ input/output contract (entity_id, hour_of_day, count -> anomaly dict or
 None) the same, so `__init__.py`'s polling loop and the `anomaly` log
 category don't need to change.
 
+**Baselines survive restarts by replaying the log, not by persisting the
+model.** The baseline state (per-entity, per-hour Welford stats) lives only
+in memory. If it were left to rebuild from empty on each setup, then with
+`min_samples=8` you'd need ~8 days of continuous uptime before anything
+could be flagged again - and since HA is restarted more often than that for
+most people, detection would in practice almost never fire. Rather than add
+a serialization format for the model, `history.reconstruct_hourly_
+observations` replays the already-persisted `device_state` events into the
+same per-hour observations the live tick makes, and `warm_from_history`
+seeds the baselines from them on startup. This keeps a single source of
+truth (the log), needs no schema change, and survives a hard crash - not
+just a clean unload. The in-progress clock hour is excluded from replay so
+a partial count can't bias the baseline; the live tick records it once it
+completes.
+
 ## Scaling considerations
 
 Typical home security event volume (door/lock/motion/service-calls) is low

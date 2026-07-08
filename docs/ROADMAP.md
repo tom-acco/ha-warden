@@ -12,7 +12,31 @@
 - [x] `query_events` / `verify_integrity` / `purge_old` services
 - [x] Three summary sensors
 - [x] Unit-level smoke tests of storage.py and anomaly.py (pure Python,
-      no HA dependency needed)
+      no HA dependency needed) - in `tests/`, runnable as `pytest tests/`
+      or by running each file directly
+
+## Phase 0.1 - post-review hardening (done)
+
+Findings from a code review of the initial scaffold, fixed in the commits
+following it:
+
+- [x] **Hash-chain write race.** `storage.append()` is a read-last-hash ->
+      insert read-modify-write, driven from HA's multi-threaded executor
+      over one shared connection. Concurrent appends could fork the chain
+      and make `verify_integrity` report false tampering. Now serialized
+      with a lock; regression-tested with 16 threads / 2000 writes.
+- [x] **Config-flow list fields.** `monitored_domains` /
+      `monitored_device_classes` used `vol.Coerce(list)`, which HA renders
+      as a text box and which shreds a typed string into per-character
+      lists. Replaced with a proper multi-select `SelectSelector`.
+- [x] **Anomaly baselines reset on every restart.** They lived only in
+      memory, so with `min_samples=8` detection effectively never fired for
+      anyone who restarts HA weekly. Now rehydrated on startup by replaying
+      persisted `device_state` history (no schema change).
+- [x] Smaller fixes: recursive secret redaction, surfacing failed-write
+      exceptions instead of dropping events, service teardown on unload,
+      `outcome` filter so the failed-auth tile counts failures only,
+      OptionsFlow deprecation.
 
 **Not yet done, and worth doing before calling this "v1":**
 - [ ] Actually run it inside a live HA instance (devcontainer or HA OS VM)
