@@ -47,30 +47,28 @@ HA's own `script/setup` dev-container workflow (documented in HA core's
 own repo) is the officially supported path for core/integration
 development and is worth switching to once you're doing this regularly.
 
-## Running the standalone unit checks (no HA required)
+## Running the unit tests (no HA required)
 
-`storage.py` and `anomaly.py` have no dependency on the `homeassistant`
-package - they're plain Python + stdlib (`sqlite3`, `hashlib`, `json`,
-`math`). You can sanity-check them in isolation without a full HA install:
+`storage.py`, `anomaly.py`, and `history.py` have no dependency on the
+`homeassistant` package - they're plain Python + stdlib (`sqlite3`,
+`hashlib`, `json`, `math`). The `tests/` directory covers them (per-category
+hash chains, batch append, range-based verify, retention/size-cap, anomaly
+baseline warm-up and log replay) and needs no HA install:
 
 ```bash
-cd custom_components/security_logger
-python3 - <<'EOF'
-from storage import SecurityStorage, LogEvent
-from anomaly import AnomalyEngine
+# with pytest
+python3 -m pytest tests/
 
-s = SecurityStorage("/tmp/test_security_logger.db")
-s.open()
-s.append(LogEvent(category="auth_attempt", event_type="http_auth_failed",
-                   source_ip="1.2.3.4", outcome="failure",
-                   data={"requested_url": "/api/x"}))
-print(s.query(category="auth_attempt"))
-print(s.verify_chain())
-EOF
-rm -f /tmp/test_security_logger.db
+# or run the files directly (each has a __main__ block)
+python3 tests/test_storage.py
+python3 tests/test_anomaly.py
 ```
 
-The two files that DO import `homeassistant` (`__init__.py`,
+`tests/conftest.py` registers a bare `security_logger` package pointing at
+the component dir, so the relative imports in `history.py` resolve without
+executing the HA-dependent `__init__.py`.
+
+The files that DO import `homeassistant` (`__init__.py`, `buffer.py`,
 `event_listener.py`, `auth_listener.py`'s handler registration,
 `config_flow.py`, `sensor.py`) need a real or stubbed HA environment to
 exercise beyond a syntax check (`python3 -m py_compile <file>.py`).
@@ -81,9 +79,11 @@ exercise beyond a syntax check (`python3 -m py_compile <file>.py`).
 2. Add this repo's URL, category "Integration".
 3. Install "Security Logger", restart HA, add the integration via the UI.
 
-`hacs.json` at the repo root is already set up for this - update the
-`homeassistant` minimum version field there as you find the actual
-minimum version this works against (currently a placeholder).
+`hacs.json` at the repo root is already set up for this. Its
+`homeassistant` minimum version is currently `2024.11.0` (chosen for the
+OptionsFlow `config_entry` property and the config-flow selectors) - revise
+it if you confirm the integration works against an older release, or need to
+raise it.
 
 ## Suggested next steps once you're in your own workspace
 
