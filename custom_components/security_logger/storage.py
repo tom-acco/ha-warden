@@ -172,6 +172,7 @@ class SecurityStorage:
         since: Optional[float] = None,
         until: Optional[float] = None,
         limit: int = 200,
+        outcome: Optional[str] = None,
     ) -> list[dict[str, Any]]:
         assert self._conn is not None
         clauses = []
@@ -185,6 +186,9 @@ class SecurityStorage:
         if user_id:
             clauses.append("user_id = ?")
             params.append(user_id)
+        if outcome:
+            clauses.append("outcome = ?")
+            params.append(outcome)
         if since is not None:
             clauses.append("ts >= ?")
             params.append(since)

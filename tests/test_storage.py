@@ -47,6 +47,19 @@ def test_verify_detects_tampering():
     storage.close()
 
 
+def test_query_filters_by_outcome():
+    storage = _fresh_storage()
+    storage.append(LogEvent(category="auth_attempt", event_type="x", outcome="failure"))
+    storage.append(LogEvent(category="auth_attempt", event_type="x", outcome="failure"))
+    storage.append(LogEvent(category="auth_attempt", event_type="x", outcome="success"))
+
+    failures = storage.query(category="auth_attempt", outcome="failure")
+    assert len(failures) == 2
+    assert all(row["outcome"] == "failure" for row in failures)
+    assert len(storage.query(category="auth_attempt")) == 3
+    storage.close()
+
+
 def test_concurrent_appends_keep_chain_intact():
     storage = _fresh_storage()
     n = 2000
@@ -73,5 +86,6 @@ def test_concurrent_appends_keep_chain_intact():
 if __name__ == "__main__":
     test_append_and_verify_roundtrip()
     test_verify_detects_tampering()
+    test_query_filters_by_outcome()
     test_concurrent_appends_keep_chain_intact()
     print("all storage tests passed")

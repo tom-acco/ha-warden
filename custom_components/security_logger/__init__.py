@@ -22,6 +22,7 @@ from pathlib import Path
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -94,8 +95,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         for very high event volumes, put a bounded asyncio.Queue in front
         of this - left simple here since typical home security event
         volume is low (see docs/ARCHITECTURE.md, "Scaling considerations").
+
+        The write future is otherwise discarded, so a failed append would
+        vanish silently (a dropped event in a *security* log). Attach a
+        callback that logs any exception instead.
         """
-        hass.async_add_executor_job(storage.append, event)
+        future = hass.async_add_executor_job(storage.append, event)
+
+        def _log_write_error(fut) -> None:
+            exc = fut.exception()
+            if exc is not None:
+                _LOGGER.error(
+                    "Security Logger: failed to persist %s/%s event: %s",
+                    event.category, event.event_type, exc,
+                )
+
+        future.add_done_callback(_log_write_error)
 
     unsub_listeners: list = []
     unsub_listeners.append(setup_action_listener(hass, enqueue))
@@ -140,11 +155,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry: detach listeners, close the DB."""
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if not unloaded:
+        return False
+
     data = hass.data[DOMAIN].pop(entry.entry_id)
     for unsub in data[DATA_UNSUB_LISTENERS]:
         unsub()
     await hass.async_add_executor_job(data[DATA_STORAGE].close)
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+    # Services are registered once and shared across entries; tear them down
+    # when the last entry unloads so a stale service call can't dereference a
+    # storage that no longer exists.
+    if not hass.data[DOMAIN]:
+        for service in (SERVICE_QUERY_EVENTS, SERVICE_VERIFY_INTEGRITY, SERVICE_PURGE_OLD):
+            hass.services.async_remove(DOMAIN, service)
+
+    return True
 
 
 def _setup_anomaly_polling(hass, storage: SecurityStorage, engine: AnomalyEngine, enqueue):
@@ -187,13 +214,27 @@ def _setup_anomaly_polling(hass, storage: SecurityStorage, engine: AnomalyEngine
     return async_track_time_interval(hass, _tick, timedelta(hours=1))
 
 
+def _get_storage(hass: HomeAssistant) -> SecurityStorage:
+    """Return the storage for the (typically only) loaded entry.
+
+    Services are global, but state lives per-entry; with a single entry - the
+    normal case - this is unambiguous. Raise a clear error rather than a bare
+    StopIteration if called with no entry loaded (e.g. a service call racing a
+    reload).
+    """
+    entries = hass.data.get(DOMAIN, {})
+    if not entries:
+        raise HomeAssistantError("Security Logger is not loaded")
+    entry_id = next(iter(entries))
+    return entries[entry_id][DATA_STORAGE]
+
+
 def _register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_QUERY_EVENTS):
         return  # already registered by a previous entry
 
     async def _query_events(call: ServiceCall) -> ServiceResponse:
-        entry_id = next(iter(hass.data[DOMAIN]))
-        storage: SecurityStorage = hass.data[DOMAIN][entry_id][DATA_STORAGE]
+        storage = _get_storage(hass)
 
         since = call.data.get("since")
         until = call.data.get("until")
@@ -209,14 +250,12 @@ def _register_services(hass: HomeAssistant) -> None:
         return {"events": results}
 
     async def _verify_integrity(call: ServiceCall) -> ServiceResponse:
-        entry_id = next(iter(hass.data[DOMAIN]))
-        storage: SecurityStorage = hass.data[DOMAIN][entry_id][DATA_STORAGE]
+        storage = _get_storage(hass)
         result = await hass.async_add_executor_job(storage.verify_chain)
         return result
 
     async def _purge_old(call: ServiceCall) -> ServiceResponse:
-        entry_id = next(iter(hass.data[DOMAIN]))
-        storage: SecurityStorage = hass.data[DOMAIN][entry_id][DATA_STORAGE]
+        storage = _get_storage(hass)
         retention_days = call.data.get("retention_days", DEFAULT_RETENTION_DAYS)
         cutoff = time.time() - retention_days * 86400
         deleted = await hass.async_add_executor_job(storage.purge_older_than, cutoff)

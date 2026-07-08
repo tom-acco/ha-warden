@@ -111,14 +111,15 @@ class SecurityLoggerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> "SecurityLoggerOptionsFlow":
-        return SecurityLoggerOptionsFlow(config_entry)
+        return SecurityLoggerOptionsFlow()
 
 
 class SecurityLoggerOptionsFlow(config_entries.OptionsFlow):
-    """Allow changing monitored domains / thresholds after setup."""
+    """Allow changing monitored domains / thresholds after setup.
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
+    Note: no __init__ reassigning self.config_entry - the base OptionsFlow
+    provides it as a property, and assigning it is deprecated (HA 2024.11+).
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None

@@ -5,17 +5,27 @@ security_logger.query_events service.
 """
 from __future__ import annotations
 
+import logging
 import time
+from datetime import timedelta
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity, DataUpdateCoordinator
-from datetime import timedelta
 
-from .const import DATA_STORAGE, DOMAIN
+from .const import (
+    AUTH_FAILURE,
+    CATEGORY_ACTION,
+    CATEGORY_ANOMALY,
+    CATEGORY_AUTH,
+    DATA_STORAGE,
+    DOMAIN,
+)
 from .storage import SecurityStorage
+
+_LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(minutes=5)
 
@@ -30,9 +40,15 @@ async def async_setup_entry(
         day_ago = now - 86400
 
         def _counts():
-            failed_auth = storage.query(category="auth_attempt", since=day_ago, until=now, limit=10000)
-            anomalies = storage.query(category="anomaly", since=day_ago, until=now, limit=10000)
-            actions = storage.query(category="user_action", since=day_ago, until=now, limit=10000)
+            # Count only failures for the "Failed Auth" tile; once successful
+            # logins are captured (Phase 2) they share CATEGORY_AUTH and would
+            # otherwise inflate this number.
+            failed_auth = storage.query(
+                category=CATEGORY_AUTH, outcome=AUTH_FAILURE,
+                since=day_ago, until=now, limit=10000,
+            )
+            anomalies = storage.query(category=CATEGORY_ANOMALY, since=day_ago, until=now, limit=10000)
+            actions = storage.query(category=CATEGORY_ACTION, since=day_ago, until=now, limit=10000)
             return {
                 "failed_auth_24h": len(failed_auth),
                 "anomalies_24h": len(anomalies),
@@ -43,9 +59,7 @@ async def async_setup_entry(
 
     coordinator = DataUpdateCoordinator(
         hass,
-        logger=hass.helpers.logging.getLogger(__name__)
-        if hasattr(hass.helpers, "logging")
-        else __import__("logging").getLogger(__name__),
+        logger=_LOGGER,
         name=f"{DOMAIN}_counts",
         update_method=_update,
         update_interval=SCAN_INTERVAL,

@@ -100,10 +100,22 @@ def setup_state_listener(
 # logging, in case a service call itself contains a secret (e.g. a code
 # passed to alarm_control_panel.alarm_disarm).
 _REDACT_KEYS = {"code", "password", "pin", "token", "api_key"}
+_REDACTED = "***REDACTED***"
 
 
-def _redact(service_data: dict[str, Any]) -> dict[str, Any]:
-    return {
-        k: ("***REDACTED***" if k.lower() in _REDACT_KEYS else v)
-        for k, v in service_data.items()
-    }
+def _redact(value: Any) -> Any:
+    """Recursively redact secret-shaped keys anywhere in the structure.
+
+    Service data can nest (e.g. a dict/list under some key), so a top-level-
+    only pass would leak a secret one level down. Any key matching
+    _REDACT_KEYS has its value replaced wholesale; other values are walked.
+    """
+    if isinstance(value, dict):
+        return {
+            k: (_REDACTED if isinstance(k, str) and k.lower() in _REDACT_KEYS
+                else _redact(v))
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_redact(v) for v in value]
+    return value
