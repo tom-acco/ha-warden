@@ -13,9 +13,9 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(__file__))
-import conftest  # noqa: F401,E402  (registers the security_logger package)
+import conftest  # noqa: F401,E402  (registers the warden package)
 
-from security_logger.storage import SecurityStorage, LogEvent, GENESIS_HASH  # noqa: E402
+from warden.storage import SecurityStorage, LogEvent, GENESIS_HASH  # noqa: E402
 
 
 def _fresh_storage() -> SecurityStorage:

@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Set up Security Logger",
+        "title": "Set up Warden",
         "data": {
           "db_path": "Database file path (relative to your HA config dir)",
           "monitored_domains": "Domains to monitor (e.g. lock, alarm_control_panel, camera)",
@@ -21,7 +21,7 @@
   "options": {
     "step": {
       "init": {
-        "title": "Security Logger options",
+        "title": "Warden options",
         "data": {
           "db_path": "Database file path (relative to your HA config dir)",
           "monitored_domains": "Domains to monitor",

@@ -67,7 +67,7 @@ class WriteBuffer:
         elif depth >= self._max_events * 10 and not self._overflow_warned:
             self._overflow_warned = True
             _LOGGER.warning(
-                "Security Logger: write buffer backlog exceeded %d events; "
+                "Warden: write buffer backlog exceeded %d events; "
                 "persistence is not keeping up with event volume",
                 self._max_events * 10,
             )
@@ -94,7 +94,7 @@ class WriteBuffer:
             )
         except Exception as exc:  # noqa: BLE001 - a dropped security event must be surfaced
             _LOGGER.error(
-                "Security Logger: failed to persist %d buffered events: %s",
+                "Warden: failed to persist %d buffered events: %s",
                 len(batch),
                 exc,
             )

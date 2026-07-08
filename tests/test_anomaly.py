@@ -6,11 +6,11 @@ import sys
 import tempfile
 
 sys.path.insert(0, os.path.dirname(__file__))
-import conftest  # noqa: F401,E402  (registers the security_logger package)
+import conftest  # noqa: F401,E402  (registers the warden package)
 
-from security_logger.anomaly import AnomalyEngine  # noqa: E402
-from security_logger.history import reconstruct_hourly_observations  # noqa: E402
-from security_logger.storage import SecurityStorage, LogEvent  # noqa: E402
+from warden.anomaly import AnomalyEngine  # noqa: E402
+from warden.history import reconstruct_hourly_observations  # noqa: E402
+from warden.storage import SecurityStorage, LogEvent  # noqa: E402
 
 
 def test_cold_engine_will_not_flag_before_min_samples():

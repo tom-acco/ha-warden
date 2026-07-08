@@ -1,4 +1,4 @@
-"""Security Logger - structured, tamper-evident security event logging
+"""Warden - structured, tamper-evident security event logging
 for Home Assistant.
 
 See docs/ARCHITECTURE.md for the full design rationale. Summary of what
@@ -49,6 +49,7 @@ from .const import (
     DEFAULT_ANOMALY_Z_THRESHOLD,
     DEFAULT_BUFFER_FLUSH_SECONDS,
     DEFAULT_BUFFER_MAX_EVENTS,
+    DEFAULT_DB_FILENAME,
     DEFAULT_MAX_DB_SIZE_MB,
     DEFAULT_MONITORED_DEVICE_CLASSES,
     DEFAULT_MONITORED_DOMAINS,
@@ -81,10 +82,10 @@ QUERY_EVENTS_SCHEMA = vol.Schema(
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Security Logger from a config entry."""
+    """Set up Warden from a config entry."""
     options = {**entry.data, **entry.options}
 
-    db_path = Path(hass.config.path(options.get(CONF_DB_PATH, "security_logger.db")))
+    db_path = Path(hass.config.path(options.get(CONF_DB_PATH, DEFAULT_DB_FILENAME)))
     storage = SecurityStorage(db_path)
     await hass.async_add_executor_job(storage.open)
 
@@ -141,7 +142,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         applied = anomaly_engine.warm_from_history(observations)
         if applied:
             _LOGGER.debug(
-                "Security Logger: warmed anomaly baselines from %d historical "
+                "Warden: warmed anomaly baselines from %d historical "
                 "hourly observations",
                 applied,
             )
@@ -206,7 +207,7 @@ def _setup_anomaly_polling(hass, storage: SecurityStorage, engine: AnomalyEngine
             result = engine.record_period(entity_id, hour_of_day, count)
             if result is not None:
                 _LOGGER.warning(
-                    "Security Logger: anomalous activity on %s - %s",
+                    "Warden: anomalous activity on %s - %s",
                     entity_id,
                     result,
                 )
@@ -252,7 +253,7 @@ def _setup_retention(hass: HomeAssistant, storage: SecurityStorage, options: dic
         by_age, by_size = await hass.async_add_executor_job(_run)
         if by_age or by_size:
             _LOGGER.info(
-                "Security Logger retention: %s purged by age, %d by size cap",
+                "Warden retention: %s purged by age, %d by size cap",
                 by_age or "nothing",
                 by_size,
             )
@@ -270,7 +271,7 @@ def _get_storage(hass: HomeAssistant) -> SecurityStorage:
     """
     entries = hass.data.get(DOMAIN, {})
     if not entries:
-        raise HomeAssistantError("Security Logger is not loaded")
+        raise HomeAssistantError("Warden is not loaded")
     entry_id = next(iter(entries))
     return entries[entry_id][DATA_STORAGE]
 

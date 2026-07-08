@@ -1,4 +1,4 @@
-"""Tamper-evident storage layer for Security Logger.
+"""Tamper-evident storage layer for Warden.
 
 Design notes (see docs/ARCHITECTURE.md for the full rationale):
 

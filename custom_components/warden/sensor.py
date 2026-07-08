@@ -1,7 +1,7 @@
 """Simple sensors so the log's headline numbers show up on a dashboard
 without needing a custom frontend panel yet (that's Phase 2 - see
 docs/ROADMAP.md). Full history/search still goes through the
-security_logger.query_events service.
+warden.query_events service.
 """
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ class SecurityCountSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, key: str, name: str, icon: str) -> None:
         super().__init__(coordinator)
         self._key = key
-        self._attr_name = f"Security Logger {name}"
+        self._attr_name = f"Warden {name}"
         self._attr_unique_id = f"{DOMAIN}_{key}"
         self._attr_icon = icon
         self._attr_native_unit_of_measurement = "events"

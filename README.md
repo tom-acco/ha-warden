@@ -1,4 +1,4 @@
-# Security Logger for Home Assistant
+# Warden for Home Assistant
 
 A Home Assistant custom integration for structured, tamper-evident security
 event logging: failed/successful auth attempts, who-did-what user action
@@ -42,14 +42,14 @@ Logbook doesn't give you.
   deeper hooks into the auth provider. This is flagged explicitly in
   `auth_listener.py` and tracked as a Phase 2 item - don't assume it works.
 - **A dedicated frontend panel/dashboard.** For now, use the
-  `security_logger.query_events` service (Developer Tools -> Actions) or
+  `warden.query_events` service (Developer Tools -> Actions) or
   build a Lovelace card around it. A proper panel is Phase 2.
 - Long-term archival/export tooling beyond the raw SQLite file.
 
 ## Repository layout
 
 ```
-custom_components/security_logger/   The actual HA integration
+custom_components/warden/   The actual HA integration
   __init__.py        Setup/teardown, listener wiring, service registration
   manifest.json       HA integration manifest
   const.py             Config keys, defaults, event category constants
@@ -74,13 +74,13 @@ hacs.json               Makes this repo installable via HACS as a custom reposit
 
 ## Quick install (for testing against a real Home Assistant instance)
 
-1. Copy `custom_components/security_logger/` into your HA config's
+1. Copy `custom_components/warden/` into your HA config's
    `custom_components/` directory (or add this repo to HACS as a custom
    repository - see `docs/SETUP.md`).
 2. Restart Home Assistant.
-3. Settings -> Devices & Services -> Add Integration -> "Security Logger".
+3. Settings -> Devices & Services -> Add Integration -> "Warden".
 4. Choose which domains/device classes to monitor.
-5. Try it: Developer Tools -> Actions -> `security_logger.query_events`.
+5. Try it: Developer Tools -> Actions -> `warden.query_events`.
 
 See `docs/SETUP.md` for the full local development workflow, including
 running against a local HA instance in a virtualenv/devcontainer.

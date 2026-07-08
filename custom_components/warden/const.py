@@ -1,7 +1,7 @@
-"""Constants for the Security Logger integration."""
+"""Constants for the Warden integration."""
 from __future__ import annotations
 
-DOMAIN = "security_logger"
+DOMAIN = "warden"
 
 # --- Config / options keys -------------------------------------------------
 CONF_DB_PATH = "db_path"
@@ -19,7 +19,7 @@ CONF_MAX_DB_SIZE_MB = "max_db_size_mb"
 CONF_BUFFER_MAX_EVENTS = "buffer_max_events"
 CONF_BUFFER_FLUSH_SECONDS = "buffer_flush_seconds"
 
-DEFAULT_DB_FILENAME = "security_logger.db"
+DEFAULT_DB_FILENAME = "warden.db"
 DEFAULT_MONITORED_DOMAINS = ["lock", "alarm_control_panel", "camera"]
 DEFAULT_MONITORED_DEVICE_CLASSES = ["door", "window", "motion", "garage_door"]
 DEFAULT_ANOMALY_Z_THRESHOLD = 3.0

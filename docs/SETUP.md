@@ -8,12 +8,12 @@ running somewhere you control:
 ```bash
 # from your HA config directory
 mkdir -p custom_components
-ln -s /path/to/this/repo/custom_components/security_logger \
-      custom_components/security_logger
+ln -s /path/to/this/repo/custom_components/warden \
+      custom_components/warden
 ```
 
 Restart HA, then Settings -> Devices & Services -> Add Integration ->
-search "Security Logger".
+search "Warden".
 
 For HA OS/Supervised installs where you can't easily symlink (e.g. no
 shell access to the underlying filesystem), just copy the folder in via
@@ -30,8 +30,8 @@ pip install homeassistant
 
 # Create a throwaway config dir
 mkdir -p ~/ha-dev-config/custom_components
-ln -s "$(pwd)/custom_components/security_logger" \
-      ~/ha-dev-config/custom_components/security_logger
+ln -s "$(pwd)/custom_components/warden" \
+      ~/ha-dev-config/custom_components/warden
 
 hass -c ~/ha-dev-config
 ```
@@ -64,7 +64,7 @@ python3 tests/test_storage.py
 python3 tests/test_anomaly.py
 ```
 
-`tests/conftest.py` registers a bare `security_logger` package pointing at
+`tests/conftest.py` registers a bare `warden` package pointing at
 the component dir, so the relative imports in `history.py` resolve without
 executing the HA-dependent `__init__.py`.
 
@@ -77,7 +77,7 @@ exercise beyond a syntax check (`python3 -m py_compile <file>.py`).
 
 1. HACS -> Integrations -> the "..." menu -> Custom repositories.
 2. Add this repo's URL, category "Integration".
-3. Install "Security Logger", restart HA, add the integration via the UI.
+3. Install "Warden", restart HA, add the integration via the UI.
 
 `hacs.json` at the repo root is already set up for this. Its
 `homeassistant` minimum version is currently `2024.11.0` (chosen for the
@@ -91,7 +91,7 @@ raise it.
    this scaffold has not yet been run inside a live HA instance.
 2. Trigger a few real events (lock/unlock a demo lock entity, call a
    service, deliberately fail a login) and confirm they show up via
-   `security_logger.query_events`.
+   `warden.query_events`.
 3. Verify the ban-log regex in `auth_listener.py` against the exact log
    line your HA version emits - grep your `home-assistant.log` for
    "invalid authentication" after a deliberate failed login.

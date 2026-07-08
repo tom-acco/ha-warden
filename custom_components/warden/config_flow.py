@@ -1,4 +1,4 @@
-"""Config flow for Security Logger.
+"""Config flow for Warden.
 
 Minimal single-step flow: ask where to put the database and which domains
 to monitor by default. Everything here is also editable later via the
@@ -125,7 +125,7 @@ def _schema(defaults: dict[str, Any]) -> vol.Schema:
     )
 
 
-class SecurityLoggerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+class WardenConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle the initial setup UI flow."""
 
     VERSION = 1
@@ -136,7 +136,7 @@ class SecurityLoggerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            return self.async_create_entry(title="Security Logger", data=user_input)
+            return self.async_create_entry(title="Warden", data=user_input)
 
         return self.async_show_form(
             step_id="user", data_schema=_schema({}), errors=errors
@@ -146,11 +146,11 @@ class SecurityLoggerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     @callback
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
-    ) -> "SecurityLoggerOptionsFlow":
-        return SecurityLoggerOptionsFlow()
+    ) -> "WardenOptionsFlow":
+        return WardenOptionsFlow()
 
 
-class SecurityLoggerOptionsFlow(config_entries.OptionsFlow):
+class WardenOptionsFlow(config_entries.OptionsFlow):
     """Allow changing monitored domains / thresholds after setup.
 
     Note: no __init__ reassigning self.config_entry - the base OptionsFlow
