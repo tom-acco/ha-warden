@@ -1,0 +1,68 @@
+query_events:
+  name: Query security events
+  description: >
+    Search the security log. Returns matching events (newest first).
+  fields:
+    category:
+      name: Category
+      description: "One of: auth_attempt, user_action, device_state, anomaly"
+      example: "auth_attempt"
+      selector:
+        select:
+          options:
+            - auth_attempt
+            - user_action
+            - device_state
+            - anomaly
+    entity_id:
+      name: Entity
+      description: Filter to a specific entity_id
+      example: "lock.front_door"
+      selector:
+        text:
+    user_id:
+      name: User ID
+      description: Filter to a specific HA user id
+      selector:
+        text:
+    since:
+      name: Since
+      description: Only events at or after this time
+      selector:
+        datetime:
+    until:
+      name: Until
+      description: Only events at or before this time
+      selector:
+        datetime:
+    limit:
+      name: Limit
+      description: Maximum number of results
+      default: 200
+      selector:
+        number:
+          min: 1
+          max: 5000
+
+verify_integrity:
+  name: Verify log integrity
+  description: >
+    Recomputes the hash chain over the entire log and reports whether it is
+    intact, and if not, the id of the first row where it breaks.
+
+purge_old:
+  name: Purge old events
+  description: >
+    Deletes events older than the given retention window. Breaks the hash
+    chain's from-genesis verification for the remaining rows - see the
+    storage.py docstring before using this on a log you need to audit long
+    term.
+  fields:
+    retention_days:
+      name: Retention (days)
+      description: Delete events older than this many days
+      default: 365
+      selector:
+        number:
+          min: 1
+          max: 3650

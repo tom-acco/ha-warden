@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up Security Logger",
+        "data": {
+          "db_path": "Database file path (relative to your HA config dir)",
+          "monitored_domains": "Domains to monitor (e.g. lock, alarm_control_panel, camera)",
+          "monitored_device_classes": "Device classes to monitor (e.g. door, window, motion)",
+          "anomaly_enabled": "Enable anomaly detection",
+          "anomaly_z_threshold": "Anomaly sensitivity (z-score threshold)",
+          "retention_days": "Retention period (days)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Security Logger options",
+        "data": {
+          "db_path": "Database file path (relative to your HA config dir)",
+          "monitored_domains": "Domains to monitor",
+          "monitored_device_classes": "Device classes to monitor",
+          "anomaly_enabled": "Enable anomaly detection",
+          "anomaly_z_threshold": "Anomaly sensitivity (z-score threshold)",
+          "retention_days": "Retention period (days)"
+        }
+      }
+    }
+  }
+}
