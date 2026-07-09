@@ -101,9 +101,12 @@ following it:
       ends with "({user_agent})"; `CURRENT_BAN_MSG_RE` still matches (it
       stops at the URL) but drops that fingerprint. Extend the regex to
       capture it.
-- [ ] Dedicated frontend panel (custom Lovelace panel via HA's panel
-      registration API) with a searchable/filterable timeline, replacing
-      the "call a service and read the response" workflow.
+- [ ] Dedicated frontend panel (sidebar item) with a searchable/filterable
+      timeline, replacing the "call a service and read the response"
+      workflow. **Designed in `docs/PANEL.md`** — recommended approach is a
+      no-build vanilla web-component panel over a small admin-only WebSocket
+      API; milestone M1 (the WS commands) is independently useful. Not yet
+      implemented.
 - [ ] Per-user notification rules (e.g. "notify me only for anomalies on
       exterior door sensors", "notify me for any failed auth from a new
       IP").
