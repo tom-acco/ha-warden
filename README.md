@@ -85,6 +85,38 @@ hacs.json               Makes this repo installable via HACS as a custom reposit
 See `docs/SETUP.md` for the full local development workflow, including
 running against a local HA instance in a virtualenv/devcontainer.
 
+## Viewing the log on a dashboard
+
+There's no dedicated panel yet (Phase 2). Until then, the `Warden Recent
+Events` sensor exposes the latest rows as an attribute, so a built-in
+**Markdown** card can render them as a table - no custom (HACS frontend)
+cards required. Add this as a manual card (adjust the entity IDs if yours
+differ):
+
+```yaml
+type: vertical-stack
+cards:
+  - type: entities
+    title: Warden
+    entities:
+      - entity: sensor.warden_failed_auth_attempts_24h
+      - entity: sensor.warden_detected_anomalies_24h
+      - entity: sensor.warden_user_actions_24h
+  - type: markdown
+    content: |
+      ## Recent events
+
+      | Time | Category | Type | Entity | User | Outcome |
+      | --- | --- | --- | --- | --- | --- |
+      {% for e in state_attr('sensor.warden_recent_events', 'events') or [] -%}
+      | {{ e.time }} | {{ e.category }} | {{ e.type }} | {{ e.entity or '—' }} | {{ e.user[-8:] if e.user else '—' }} | {{ e.outcome or '—' }} |
+      {% endfor -%}
+```
+
+The table refreshes every 5 minutes (the sensor's scan interval) and shows
+the 20 most recent events. For full search/filtering, use the
+`warden.query_events` action (Developer Tools -> Actions).
+
 ## Security design notes (read before relying on this)
 
 - **We do not log entered passwords**, even for failed attempts. Logging
