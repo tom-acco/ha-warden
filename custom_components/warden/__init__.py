@@ -154,9 +154,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id][DATA_UNSUB_LISTENERS] = unsub_listeners
 
+    # Reload when options change, so edits to retention / monitored entities /
+    # buffer thresholds take effect without an HA restart. Without this the
+    # options flow saves but appears to do nothing until the next restart.
+    entry.async_on_unload(entry.add_update_listener(_async_reload_on_update))
+
     _register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+async def _async_reload_on_update(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Update listener: reload the entry so new options are applied."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

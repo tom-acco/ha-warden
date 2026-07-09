@@ -60,6 +60,7 @@ async def async_setup_entry(
     coordinator = DataUpdateCoordinator(
         hass,
         logger=_LOGGER,
+        config_entry=entry,
         name=f"{DOMAIN}_counts",
         update_method=_update,
         update_interval=SCAN_INTERVAL,
