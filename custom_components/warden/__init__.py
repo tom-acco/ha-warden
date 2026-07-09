@@ -20,6 +20,8 @@ from datetime import timedelta
 from pathlib import Path
 
 import voluptuous as vol
+from homeassistant.components import frontend, panel_custom
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
@@ -43,6 +45,7 @@ from .const import (
     CONF_MONITORED_DOMAINS,
     CONF_SECURITY_RETENTION_DAYS,
     DATA_BUFFER,
+    DATA_GLOBALS,
     DATA_STORAGE,
     DATA_UNSUB_LISTENERS,
     DEFAULT_ACTIVITY_RETENTION_DAYS,
@@ -56,6 +59,13 @@ from .const import (
     DEFAULT_RETENTION_DAYS,
     DEFAULT_SECURITY_RETENTION_DAYS,
     DOMAIN,
+    PANEL_ASSET_VERSION,
+    PANEL_ICON,
+    PANEL_JS_FILENAME,
+    PANEL_STATIC_URL,
+    PANEL_TITLE,
+    PANEL_URL_PATH,
+    PANEL_WEBCOMPONENT,
     RETENTION_TIERS,
     SERVICE_PURGE_OLD,
     SERVICE_QUERY_EVENTS,
@@ -64,6 +74,7 @@ from .const import (
 from .event_listener import setup_action_listener, setup_state_listener
 from .history import reconstruct_hourly_observations
 from .storage import LogEvent, SecurityStorage
+from .websocket import async_register_websocket_commands
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -160,8 +171,40 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_reload_on_update))
 
     _register_services(hass)
+    await _async_register_frontend(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Register the WS commands, serve the panel JS, and add the sidebar item.
+
+    The WS commands and static path are once-per-HA-process (they can't be
+    unregistered), so they're guarded by a persistent flag. The sidebar panel
+    is added here and removed when the last entry unloads, so it survives a
+    reload cleanly.
+    """
+    globals_ = hass.data.setdefault(DATA_GLOBALS, {})
+
+    if not globals_.get("assets"):
+        panel_dir = str(Path(__file__).parent / "panel")
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(PANEL_STATIC_URL, panel_dir, False)]
+        )
+        async_register_websocket_commands(hass)
+        globals_["assets"] = True
+
+    if not globals_.get("panel"):
+        await panel_custom.async_register_panel(
+            hass,
+            frontend_url_path=PANEL_URL_PATH,
+            webcomponent_name=PANEL_WEBCOMPONENT,
+            module_url=f"{PANEL_STATIC_URL}/{PANEL_JS_FILENAME}?v={PANEL_ASSET_VERSION}",
+            sidebar_title=PANEL_TITLE,
+            sidebar_icon=PANEL_ICON,
+            require_admin=True,
+        )
+        globals_["panel"] = True
 
 
 async def _async_reload_on_update(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -183,12 +226,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await data[DATA_BUFFER].async_shutdown()
     await hass.async_add_executor_job(data[DATA_STORAGE].close)
 
-    # Services are registered once and shared across entries; tear them down
-    # when the last entry unloads so a stale service call can't dereference a
-    # storage that no longer exists.
+    # Services and the sidebar panel are shared across entries; tear them down
+    # when the last entry unloads so nothing dereferences a storage that no
+    # longer exists. (The WS commands and static path can't be unregistered and
+    # are harmless - they just report "not loaded" until an entry returns.)
     if not hass.data[DOMAIN]:
         for service in (SERVICE_QUERY_EVENTS, SERVICE_VERIFY_INTEGRITY, SERVICE_PURGE_OLD):
             hass.services.async_remove(DOMAIN, service)
+        globals_ = hass.data.get(DATA_GLOBALS, {})
+        if globals_.get("panel"):
+            frontend.async_remove_panel(hass, PANEL_URL_PATH)
+            globals_["panel"] = False
 
     return True
 

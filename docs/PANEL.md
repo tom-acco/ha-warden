@@ -1,8 +1,12 @@
-# Dedicated panel — design & plan
+# Dedicated panel — design & status
 
-Status: **plan only, not implemented.** This is the Phase 2 "dedicated
-frontend panel" item from ROADMAP.md, thought through so the work (and its
-tradeoffs) are visible before any code is written.
+Status: **implemented (M1–M4)** via Approach C. A sidebar "Warden" panel
+(`custom_components/warden/panel/warden-panel.js`) backed by an admin-only
+WebSocket API (`websocket.py`) renders the stat tiles, a filtered + paginated
+event table with row detail, and the integrity report. M5 (live tail /
+export) remains optional/pending. The design rationale below is kept for
+context; it has **not yet been exercised in a live HA** (same caveat as the
+rest of the integration — load it on a throwaway instance first).
 
 ## Why a panel at all
 
@@ -136,17 +140,16 @@ directly). A security log must not be a privilege-escalation read.
 
 ## Milestones
 
-- **M1 — Backend.** WS commands (`stats`, `query`, `verify`) + storage
-  `offset`/`count`/size accessor. Testable without any UI via the WS API.
-- **M2 — Minimal panel.** Register the sidebar item; render tiles + a
-  read-only paginated table. Ship the single JS file via static path.
-- **M3 — Filters + row detail.** The filter bar and the expand-to-detail
-  drawer, including the context chain.
-- **M4 — Integrity view.** Surface `verify_chain` per-category.
-- **M5 — (optional) live tail + export.**
-
-M1 is independently useful (better programmatic access) even if the UI
-stalls, which de-risks the frontend commitment.
+- [x] **M1 — Backend.** WS commands (`stats`, `query`, `verify`) + storage
+  `offset`/`count`/`db_size_bytes`. Testable without any UI via the WS API.
+- [x] **M2 — Minimal panel.** Sidebar item registered; tiles + a paginated
+  table, single JS file served via static path.
+- [x] **M3 — Filters + row detail.** Category/user/outcome/free-text filter
+  bar and the expand-to-detail row (full `data` blob incl. the context chain).
+- [x] **M4 — Integrity view.** "Verify integrity" surfaces `verify_chain`
+  per-category (status, rows checked, genesis-anchored).
+- [ ] **M5 — (optional) live tail + export.** Not implemented; the Refresh
+  button + 5s write buffer are enough for now.
 
 ## Risks / open questions
 

@@ -39,6 +39,19 @@ ANOMALY_HISTORY_LOOKBACK_DAYS = 30
 DATA_STORAGE = "storage"
 DATA_BUFFER = "buffer"
 DATA_UNSUB_LISTENERS = "unsub_listeners"
+# Top-level hass.data key (NOT under DOMAIN, which holds only entries) for
+# once-per-HA singletons: the WS commands + static path + sidebar panel.
+DATA_GLOBALS = f"{DOMAIN}_globals"
+
+# --- Frontend panel ----------------------------------------------------------
+PANEL_URL_PATH = "warden"          # sidebar route: /warden
+PANEL_TITLE = "Warden"
+PANEL_ICON = "mdi:shield-search"
+PANEL_STATIC_URL = "/warden_static"
+PANEL_JS_FILENAME = "warden-panel.js"
+PANEL_WEBCOMPONENT = "warden-panel"
+# Bump when panel/warden-panel.js changes, to bust the browser cache.
+PANEL_ASSET_VERSION = "0.1.2"
 
 # --- Event categories stored in the log table -------------------------------
 CATEGORY_AUTH = "auth_attempt"

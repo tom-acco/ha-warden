@@ -226,18 +226,19 @@ class SecurityStorage:
             return len(events)
 
     # -- reads --------------------------------------------------------------
-    def query(
-        self,
-        category: Optional[str] = None,
-        entity_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        since: Optional[float] = None,
-        until: Optional[float] = None,
-        limit: int = 200,
-        outcome: Optional[str] = None,
-    ) -> list[dict[str, Any]]:
-        assert self._conn is not None
-        clauses = []
+    @staticmethod
+    def _build_filters(
+        category: Optional[str],
+        entity_id: Optional[str],
+        user_id: Optional[str],
+        outcome: Optional[str],
+        since: Optional[float],
+        until: Optional[float],
+        search: Optional[str],
+    ) -> tuple[str, list[Any]]:
+        """Shared WHERE builder for query() and count() so filtering stays
+        identical between a page of results and its total."""
+        clauses: list[str] = []
         params: list[Any] = []
         if category:
             clauses.append("category = ?")
@@ -257,17 +258,40 @@ class SecurityStorage:
         if until is not None:
             clauses.append("ts <= ?")
             params.append(until)
-
+        if search:
+            clauses.append(
+                "(entity_id LIKE ? OR event_type LIKE ? OR category LIKE ?)"
+            )
+            like = f"%{search}%"
+            params.extend([like, like, like])
         where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        return where, params
+
+    def query(
+        self,
+        category: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        since: Optional[float] = None,
+        until: Optional[float] = None,
+        limit: int = 200,
+        outcome: Optional[str] = None,
+        offset: int = 0,
+        search: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
+        assert self._conn is not None
+        where, params = self._build_filters(
+            category, entity_id, user_id, outcome, since, until, search
+        )
         sql = f"""
             SELECT id, ts, category, event_type, user_id, source_ip,
                    entity_id, domain, outcome, data
             FROM events
             {where}
             ORDER BY ts DESC
-            LIMIT ?
+            LIMIT ? OFFSET ?
         """
-        params.append(limit)
+        params.extend([limit, max(0, offset)])
         with self._lock:
             cur = self._conn.execute(sql, params)
             cols = [c[0] for c in cur.description]
@@ -278,6 +302,32 @@ class SecurityStorage:
             record["data"] = json.loads(record["data"])
             results.append(record)
         return results
+
+    def count(
+        self,
+        category: Optional[str] = None,
+        entity_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        since: Optional[float] = None,
+        until: Optional[float] = None,
+        outcome: Optional[str] = None,
+        search: Optional[str] = None,
+    ) -> int:
+        """Total rows matching the same filters query() uses (ignores
+        limit/offset). Backs the panel's pagination total and stat tiles."""
+        assert self._conn is not None
+        where, params = self._build_filters(
+            category, entity_id, user_id, outcome, since, until, search
+        )
+        with self._lock:
+            cur = self._conn.execute(
+                f"SELECT COUNT(*) FROM events {where}", params
+            )
+            return int(cur.fetchone()[0])
+
+    def db_size_bytes(self) -> int:
+        """Public accessor for the on-disk size (db + WAL + shm)."""
+        return self._db_size_bytes()
 
     # -- integrity ----------------------------------------------------------
     def verify_chain(self) -> dict[str, Any]:

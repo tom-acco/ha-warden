@@ -32,9 +32,11 @@ Logbook doesn't give you.
   hard database-size backstop, so the log doesn't grow without limit.
 - **Buffered writes** - events are batched in memory and flushed together
   (by count or time), rather than one database commit per event.
-- Three sensors (`Failed Auth Attempts (24h)`, `Detected Anomalies (24h)`,
-  `User Actions (24h)`) and three services (`query_events`,
-  `verify_integrity`, `purge_old`) for interacting with the log.
+- **Sidebar panel** - an admin-only full-page UI with stat tiles, a
+  filtered/paginated event table, row detail, and an integrity check.
+- Sensors (24h counts + a Recent Events sensor) and three services
+  (`query_events`, `verify_integrity`, `purge_old`) for interacting with the
+  log.
 
 ## What this does NOT do yet
 
@@ -60,7 +62,9 @@ custom_components/warden/   The actual HA integration
   history.py            Rebuilds anomaly baselines from the log on startup
   event_listener.py    Service-call + state-change listeners (user actions, device state)
   auth_listener.py      Failed-auth capture via HA's ban logger
-  sensor.py              Rolling 24h count sensors
+  websocket.py          Admin-only WebSocket API backing the panel
+  panel/warden-panel.js  Sidebar panel web component (no build step)
+  sensor.py              Rolling 24h count sensors + Recent Events sensor
   services.yaml          Service definitions (shows up in HA's UI)
   strings.json / translations/en.json   Config flow UI text
 tests/                  Pure-Python tests for storage/anomaly/history
@@ -85,13 +89,20 @@ hacs.json               Makes this repo installable via HACS as a custom reposit
 See `docs/SETUP.md` for the full local development workflow, including
 running against a local HA instance in a virtualenv/devcontainer.
 
-## Viewing the log on a dashboard
+## Viewing the log
 
-There's no dedicated panel yet (Phase 2). Until then, the `Warden Recent
-Events` sensor exposes the latest rows as an attribute, so a built-in
-**Markdown** card can render them as a table - no custom (HACS frontend)
-cards required. Add this as a manual card (adjust the entity IDs if yours
-differ):
+**Sidebar panel (primary).** Warden registers an admin-only **Warden** item
+in the HA sidebar - a full-page panel with stat tiles, a filtered and
+paginated event table, expand-to-detail rows (the full event `data` plus the
+context chain), and a "Verify integrity" button. It's backed by an admin-only
+WebSocket API (`websocket.py`) and a single no-build web component
+(`panel/warden-panel.js`); see `docs/PANEL.md`.
+
+**Dashboard card (optional).** For an at-a-glance view on your own dashboard,
+the `Warden Recent Events` sensor exposes the latest rows as an attribute, so
+a built-in **Markdown** card can render them as a table - no custom (HACS
+frontend) cards required. Add this as a manual card (adjust the entity IDs if
+yours differ):
 
 ```yaml
 type: vertical-stack

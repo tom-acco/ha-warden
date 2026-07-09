@@ -156,6 +156,32 @@ def test_size_cap_disabled_when_zero():
     storage.close()
 
 
+def test_query_offset_and_count():
+    storage = _fresh_storage()
+    for i in range(25):
+        storage.append(LogEvent(category="device_state", event_type="x", data={"i": i}))
+    assert storage.count(category="device_state") == 25
+    page1 = storage.query(category="device_state", limit=10, offset=0)
+    page2 = storage.query(category="device_state", limit=10, offset=10)
+    assert len(page1) == 10 and len(page2) == 10
+    # Newest-first, non-overlapping pages.
+    assert {r["id"] for r in page1}.isdisjoint({r["id"] for r in page2})
+    assert page1[0]["id"] > page2[0]["id"]
+    storage.close()
+
+
+def test_search_and_count_match():
+    storage = _fresh_storage()
+    storage.append(LogEvent(category="device_state", event_type="state_changed", entity_id="lock.front"))
+    storage.append(LogEvent(category="device_state", event_type="state_changed", entity_id="lock.back"))
+    storage.append(LogEvent(category="user_action", event_type="call_service", entity_id="light.kitchen"))
+    assert storage.count(search="lock") == 2
+    rows = storage.query(search="lock", limit=50)
+    assert len(rows) == 2
+    assert all("lock" in r["entity_id"] for r in rows)
+    storage.close()
+
+
 def test_concurrent_appends_keep_chain_intact():
     storage = _fresh_storage()
     n = 2000
@@ -188,5 +214,7 @@ if __name__ == "__main__":
     test_enforce_retention_is_per_category()
     test_enforce_size_cap_shrinks_and_deletes()
     test_size_cap_disabled_when_zero()
+    test_query_offset_and_count()
+    test_search_and_count_match()
     test_concurrent_appends_keep_chain_intact()
     print("all storage tests passed")
