@@ -92,11 +92,18 @@ running against a local HA instance in a virtualenv/devcontainer.
 ## Viewing the log
 
 **Sidebar panel (primary).** Warden registers an admin-only **Warden** item
-in the HA sidebar - a full-page panel with stat tiles, a filtered and
-paginated event table, expand-to-detail rows (the full event `data` plus the
-context chain), and a "Verify integrity" button. It's backed by an admin-only
-WebSocket API (`websocket.py`) and a single no-build web component
-(`panel/warden-panel.js`); see `docs/PANEL.md`.
+in the HA sidebar - a full-page, mobile-friendly panel with stat tiles, a
+filtered and paginated event table, expand-to-detail rows (the full event
+`data` plus the context chain), and a "Verify integrity" button. It's backed
+by an admin-only WebSocket API (`websocket.py`) and a single no-build web
+component (`panel/warden-panel.js`); see `docs/PANEL.md`.
+
+![Warden panel (illustrative mockup)](docs/panel-mockup.svg)
+
+*Illustrative mockup, not a live capture. The `Action`/`Target` columns are
+derived per row (e.g. `light.turn_on` → `light.kitchen` for a service call,
+`→ unlocked` for a state change, source IP for a failed login), and the
+`User` column shows the resolved username rather than a raw user-id UUID.*
 
 **Dashboard card (optional).** For an at-a-glance view on your own dashboard,
 the `Warden Recent Events` sensor exposes the latest rows as an attribute, so

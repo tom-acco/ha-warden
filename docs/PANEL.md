@@ -93,6 +93,12 @@ method on `SecurityStorage.query`/a sibling, and a public accessor for
 
 ## How it looks
 
+![Warden panel (illustrative mockup)](panel-mockup.svg)
+
+*Illustrative mockup, not a live capture.* The ASCII sketch below is the
+original design intent; the shipped panel matches it, with the two data
+columns made context-aware (see the feature list).
+
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │ 🛡 Warden                                          [ Verify integrity ]│
@@ -121,15 +127,25 @@ method on `SecurityStorage.query`/a sibling, and a public accessor for
 
 Feature set, prioritised:
 
-1. **Stat tiles** — the three 24h counts + DB size (from `warden/stats`).
-2. **Event table** — server-paginated, newest first, category icon/colour.
-3. **Filters** — category, entity, user, outcome, time range, free text;
+1. **Stat tiles** — the three 24h counts + DB size / row count (`warden/stats`).
+2. **Event table** — server-paginated, newest first, category colour dots.
+   The **Action** and **Target** columns are derived per row, because a raw
+   `user_action`/`call_service` row is uninformative on its own: Action shows
+   `domain.service` for calls and `→ new_state` for state changes; Target
+   falls back to the service-call target entity or the source IP.
+3. **Filters** — category, user, outcome, free text (entity/type/category);
    applied server-side so it scales past the in-memory window.
-4. **Row detail** — expand to the full `data` blob + the context chain
-   (`context_id` ← `parent_id`, the "what caused this" trail) + row hashes.
-5. **Integrity view** — "Verify integrity" runs `warden/verify` and shows
-   per-category chain status (range, `anchored_to_genesis`, ok / first break).
-6. *(later)* **Live tail** toggle, and **Export** current query to JSON/CSV.
+4. **Usernames** — `user_id` is resolved to the account name server-side
+   (`hass.auth`), since the raw UUID means nothing to a human.
+5. **Row detail** — expand to the full `data` blob + the context chain
+   (`context_id` ← `parent_id`, the "what caused this" trail).
+6. **Integrity view** — "Verify integrity" runs `warden/verify` and shows
+   per-category chain status (rows checked, `anchored_to_genesis`, ok / first
+   break).
+7. **Mobile** — a sidebar-toggle (☰) button and a responsive layout: stacked
+   filters, and the User/Outcome columns collapse into the row detail on
+   narrow screens.
+8. *(later)* **Live tail** toggle, and **Export** current query to JSON/CSV.
 
 ## Permissions
 
