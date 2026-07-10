@@ -8,10 +8,11 @@ import sys
 sys.path.insert(0, os.path.dirname(__file__))
 import conftest  # noqa: F401,E402  (registers the warden package)
 
-from warden.auth_listener import CURRENT_BAN_MSG_RE  # noqa: E402
+from warden.auth_listener import BAN_APPLIED_RE, CURRENT_BAN_MSG_RE  # noqa: E402
 from warden.auth_poller import (  # noqa: E402
     AuthTokenTracker,
     EVENT_LONG_LIVED_TOKEN_CREATED,
+    EVENT_SESSION_ENDED,
     EVENT_SESSION_NEW_IP,
     EVENT_SESSION_STARTED,
     TOKEN_TYPE_LONG_LIVED,
@@ -36,6 +37,15 @@ def test_ban_regex_extracts_ip_url_and_user_agent():
     # The greedy UA group must span its own inner parens.
     assert m.group(4).startswith("Mozilla/5.0 (Macintosh;")
     assert m.group(4).endswith("Safari/537.36")
+
+
+def test_ban_applied_regex_matches_the_ban_escalation():
+    msg = "Banned IP 10.1.102.50 for too many login attempts"
+    m = BAN_APPLIED_RE.search(msg)
+    assert m is not None
+    assert m.group(1) == "10.1.102.50"
+    # The failed-attempt regex must NOT match the ban line (distinct events).
+    assert CURRENT_BAN_MSG_RE.search(msg) is None
 
 
 def test_ban_regex_without_user_agent_still_matches():
@@ -93,13 +103,17 @@ def test_tracker_first_ip_is_silent_when_created_without_one():
     assert len(later) == 1 and later[0].event_type == EVENT_SESSION_NEW_IP
 
 
-def test_tracker_prunes_revoked_tokens():
+def test_tracker_emits_session_ended_on_revoke():
     tr = AuthTokenTracker()
-    tr.process([_tok("a", ip="1.1.1.1")])  # baseline
-    tr.process([])                          # 'a' revoked -> pruned
-    events = tr.process([_tok("a", ip="1.1.1.1")])  # reappears -> treated as new
-    assert len(events) == 1
-    assert events[0].event_type == EVENT_SESSION_STARTED
+    tr.process([_tok("a", ip="1.1.1.1")])   # baseline
+    ended = tr.process([])                   # 'a' revoked / logged out
+    assert len(ended) == 1
+    assert ended[0].event_type == EVENT_SESSION_ENDED
+    assert ended[0].user_id == "u1"
+    assert ended[0].outcome is None          # not a failure - excluded from that tile
+    started = tr.process([_tok("a", ip="1.1.1.1")])  # reappears -> new session
+    assert len(started) == 1
+    assert started[0].event_type == EVENT_SESSION_STARTED
 
 
 if __name__ == "__main__":

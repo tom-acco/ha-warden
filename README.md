@@ -19,10 +19,15 @@ Logbook doesn't give you.
 - **Device state logging** - state changes for entities you configure
   (by domain, e.g. `lock`, `alarm_control_panel`, or device_class, e.g.
   `door`, `window`, `motion`) are logged with before/after state.
-- **Auth attempts, failed and successful** - failed logins are captured
-  from HA's ban-log warnings (source IP, requested URL, user-agent);
-  successful logins / new API tokens / sessions seen from a new IP are
-  captured by polling refresh tokens (`auth_poller.py`).
+- **Auth attempts, failed and successful** - failed logins and **IP bans**
+  are captured from HA's ban-log warnings (source IP, requested URL,
+  user-agent); successful logins, session *end* (logout/revocation), new API
+  tokens, and sessions seen from a new IP are captured by polling refresh
+  tokens (`auth_poller.py`).
+- **Backup create/restore** and **core config changes** - backups (config
+  exfiltration / restore-to-cover-tracks) via the backup manager's event
+  stream, and `core_config_updated` (location / URL / units), both under the
+  `system` category.
 - **Account changes** - user accounts created / updated / removed
   (`account` category), from HA's `user_added`/`updated`/`removed` events.
 - **System lifecycle** - HA start/stop (`system` category), so gaps in the
@@ -69,6 +74,7 @@ custom_components/warden/   The actual HA integration
   event_listener.py    Service-call + state-change listeners (user actions, device state)
   auth_listener.py      Failed-auth capture via HA's ban logger
   auth_poller.py        Successful-auth capture via refresh-token polling
+  backup_listener.py    Backup create/restore capture via the backup manager
   websocket.py          Admin-only WebSocket API backing the panel
   panel/warden-panel.js  Sidebar panel web component (no build step)
   sensor.py              Rolling 24h count sensors + Recent Events sensor

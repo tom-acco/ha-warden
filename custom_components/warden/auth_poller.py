@@ -35,6 +35,7 @@ TOKEN_TYPE_LONG_LIVED = "long_lived_access_token"
 EVENT_SESSION_STARTED = "session_started"
 EVENT_LONG_LIVED_TOKEN_CREATED = "long_lived_token_created"
 EVENT_SESSION_NEW_IP = "session_new_ip"
+EVENT_SESSION_ENDED = "session_ended"
 
 
 class AuthTokenTracker:
@@ -50,7 +51,17 @@ class AuthTokenTracker:
 
     def __init__(self) -> None:
         self._seeded = False
-        self._ips_by_token: dict[str, set[str]] = {}
+        # token_id -> {"user_id", "token_type", "client_name", "ips": set}
+        self._tokens: dict[str, dict[str, Any]] = {}
+
+    @staticmethod
+    def _record(t: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "user_id": t["user_id"],
+            "token_type": t["token_type"],
+            "client_name": t.get("client_name"),
+            "ips": {t["last_used_ip"]} if t["last_used_ip"] else set(),
+        }
 
     def process(self, snapshot: list[dict[str, Any]]) -> list[LogEvent]:
         """Given the current token snapshot, return events to log."""
@@ -59,32 +70,32 @@ class AuthTokenTracker:
 
         if not self._seeded:
             for t in snapshot:
-                self._ips_by_token[t["token_id"]] = (
-                    {t["last_used_ip"]} if t["last_used_ip"] else set()
-                )
+                self._tokens[t["token_id"]] = self._record(t)
             self._seeded = True
             return events
 
         for t in snapshot:
             tid = t["token_id"]
             ip = t["last_used_ip"]
-            if tid not in self._ips_by_token:
-                self._ips_by_token[tid] = {ip} if ip else set()
+            rec = self._tokens.get(tid)
+            if rec is None:
+                self._tokens[tid] = self._record(t)
                 events.append(self._token_event(t))
-            elif ip and self._ips_by_token[tid] and ip not in self._ips_by_token[tid]:
+            elif ip and rec["ips"] and ip not in rec["ips"]:
                 # A genuinely new location for a token we've already seen used.
-                self._ips_by_token[tid].add(ip)
+                rec["ips"].add(ip)
                 events.append(self._ip_event(t))
-            elif ip and not self._ips_by_token[tid]:
+            elif ip and not rec["ips"]:
                 # First IP for a token that was created before it was used -
                 # record it silently (it's the origin, not a *new* location).
-                self._ips_by_token[tid].add(ip)
+                rec["ips"].add(ip)
 
-        # Forget tokens that have been revoked/expired so the map can't grow
-        # without bound.
-        for tid in list(self._ips_by_token):
+        # A token that vanished was revoked / logged out / expired -> the
+        # session ended. Emit that (closing the login->logout lifecycle) and
+        # forget it so the map can't grow without bound.
+        for tid in list(self._tokens):
             if tid not in current_ids:
-                del self._ips_by_token[tid]
+                events.append(self._ended_event(self._tokens.pop(tid)))
 
         return events
 
@@ -115,6 +126,20 @@ class AuthTokenTracker:
             data={
                 "client_name": t.get("client_name"),
                 "token_type": t["token_type"],
+            },
+        )
+
+    @staticmethod
+    def _ended_event(rec: dict[str, Any]) -> LogEvent:
+        # Not a success/failure - it's the session closing - so outcome is left
+        # unset (it must not count toward the "failed auth" tile).
+        return LogEvent(
+            category=CATEGORY_AUTH,
+            event_type=EVENT_SESSION_ENDED,
+            user_id=rec["user_id"],
+            data={
+                "client_name": rec["client_name"],
+                "token_type": rec["token_type"],
             },
         )
 

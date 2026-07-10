@@ -81,6 +81,12 @@ CURRENT_BAN_MSG_RE = re.compile(
     r"(?:\.\s*\((.+)\))?"
 )
 
+# The escalation: HA banned an IP after too many failed attempts. It's a
+# WARNING on the *same* logger we already tap, so we only need to recognise
+# it. The ban is arguably the most important auth event - repeated failures
+# crossed the threshold and the IP is now locked out.
+BAN_APPLIED_RE = re.compile(r"Banned IP (\S+) for too many login attempts")
+
 
 class BanLogHandler(logging.Handler):
     """A logging.Handler that turns HA's ban-log WARNING records into
@@ -94,6 +100,19 @@ class BanLogHandler(logging.Handler):
         try:
             message = record.getMessage()
         except Exception:  # pragma: no cover - defensive, logging must not raise
+            return
+
+        ban_match = BAN_APPLIED_RE.search(message)
+        if ban_match:
+            self._enqueue(
+                LogEvent(
+                    category=CATEGORY_AUTH,
+                    event_type="ip_banned",
+                    source_ip=ban_match.group(1),
+                    outcome=AUTH_FAILURE,
+                    data={"raw_message": message},
+                )
+            )
             return
 
         match = CURRENT_BAN_MSG_RE.search(message)

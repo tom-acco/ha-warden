@@ -105,6 +105,15 @@ following it:
       lifecycle (`homeassistant_started`/`stop` -> `system` category, which
       also flushes the write buffer on shutdown). Both in the security
       retention tier.
+- [x] **Source-review finds (2026-07).** Reviewing HA source surfaced four
+      more captures: **IP bans** (the `Banned IP ...` WARNING on the ban
+      logger we already tap - the escalation we'd been dropping); **session
+      end** (the token poller already saw tokens vanish - now emits
+      `session_ended`, closing login->logout); **backup create/restore** (no
+      bus event and DEBUG-only/unlogged, so via the backup manager's
+      `async_subscribe_events` stream, defensively); and `core_config_updated`.
+      MFA enable/disable has no clean hook (no event) - noted, partially
+      covered via `user_updated` / `session_ended`.
 - [ ] **More hookable events (Tier 2).** Config-change audit trail:
       integration added/removed (no single bus event - watch
       `EVENT_COMPONENT_LOADED`/config-entries) and entity/device registry

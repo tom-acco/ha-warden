@@ -23,7 +23,11 @@ import voluptuous as vol
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT_STOP
+from homeassistant.const import (
+    EVENT_CORE_CONFIG_UPDATE,
+    EVENT_HOMEASSISTANT_STARTED,
+    EVENT_HOMEASSISTANT_STOP,
+)
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
@@ -32,6 +36,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from .anomaly import AnomalyEngine
 from .auth_listener import setup_ban_log_capture
 from .auth_poller import AuthTokenTracker, async_poll as async_poll_auth
+from .backup_listener import setup_backup_capture
 from .buffer import WriteBuffer
 from .const import (
     AUTH_POLL_INTERVAL_SECONDS,
@@ -153,6 +158,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unsub_listeners.append(await _async_setup_auth_polling(hass, enqueue))
     unsub_listeners.append(setup_account_listener(hass, enqueue))
     unsub_listeners.append(_setup_lifecycle_listeners(hass, enqueue, buffer))
+    unsub_listeners.append(setup_backup_capture(hass, enqueue))
 
     if anomaly_enabled:
         # Baselines are in-memory; warm them from persisted history so a
@@ -266,6 +272,17 @@ def _setup_lifecycle_listeners(hass: HomeAssistant, enqueue, buffer: WriteBuffer
         enqueue(LogEvent(category=CATEGORY_SYSTEM, event_type="homeassistant_started"))
 
     unsubs.append(hass.bus.async_listen(EVENT_HOMEASSISTANT_STARTED, _on_start))
+
+    def _on_config_update(event) -> None:
+        enqueue(
+            LogEvent(
+                category=CATEGORY_SYSTEM,
+                event_type="core_config_updated",
+                data=dict(event.data) if event.data else {},
+            )
+        )
+
+    unsubs.append(hass.bus.async_listen(EVENT_CORE_CONFIG_UPDATE, _on_config_update))
 
     async def _on_stop(_event) -> None:
         enqueue(LogEvent(category=CATEGORY_SYSTEM, event_type="homeassistant_stop"))
