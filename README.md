@@ -43,10 +43,8 @@ Logbook doesn't give you.
 - **Successful login capture.** HA doesn't expose this today without
   deeper hooks into the auth provider. This is flagged explicitly in
   `auth_listener.py` and tracked as a Phase 2 item - don't assume it works.
-- **A dedicated frontend panel/dashboard.** For now, use the
-  `warden.query_events` service (Developer Tools -> Actions) or
-  build a Lovelace card around it. A proper panel is Phase 2.
-- Long-term archival/export tooling beyond the raw SQLite file.
+- Long-term archival/export tooling beyond the raw SQLite file (the panel's
+  export is still a "later" item - see `docs/PANEL.md`).
 
 ## Repository layout
 

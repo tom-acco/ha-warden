@@ -1,6 +1,6 @@
-"""Simple sensors so the log's headline numbers show up on a dashboard
-without needing a custom frontend panel yet (that's Phase 2 - see
-docs/ROADMAP.md). Full history/search still goes through the
+"""Simple sensors so the log's headline numbers (and a small recent-events
+window) show up on a dashboard without opening the full Warden panel. Full
+history/search lives in the panel (see docs/PANEL.md) or the
 warden.query_events service.
 """
 from __future__ import annotations
