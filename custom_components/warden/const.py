@@ -56,13 +56,18 @@ PANEL_STATIC_URL = "/warden_static"
 PANEL_JS_FILENAME = "warden-panel.js"
 PANEL_WEBCOMPONENT = "warden-panel"
 # Bump when panel/warden-panel.js changes, to bust the browser cache.
-PANEL_ASSET_VERSION = "0.1.3"
+PANEL_ASSET_VERSION = "0.1.5"
 
 # --- Event categories stored in the log table -------------------------------
 CATEGORY_AUTH = "auth_attempt"
 CATEGORY_ACTION = "user_action"
 CATEGORY_STATE = "device_state"
 CATEGORY_ANOMALY = "anomaly"
+# HA lifecycle events (start/stop) - gaps in the audit trail are meaningful.
+CATEGORY_SYSTEM = "system"
+# User account changes (added/updated/removed) - account management is prime
+# audit material.
+CATEGORY_ACCOUNT = "account"
 # Integration's own audit records (purge events). Must match
 # storage.MAINTENANCE_CATEGORY.
 CATEGORY_MAINTENANCE = "maintenance"
@@ -76,6 +81,8 @@ RETENTION_TIERS = {
     CATEGORY_ACTION: "activity",
     CATEGORY_AUTH: "security",
     CATEGORY_ANOMALY: "security",
+    CATEGORY_SYSTEM: "security",
+    CATEGORY_ACCOUNT: "security",
     CATEGORY_MAINTENANCE: "security",
 }
 

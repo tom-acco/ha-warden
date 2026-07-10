@@ -18,6 +18,8 @@ const CATEGORIES = [
   "user_action",
   "device_state",
   "anomaly",
+  "account",
+  "system",
   "maintenance",
 ];
 
@@ -26,6 +28,8 @@ const CATEGORY_COLOR = {
   anomaly: "var(--warning-color, #ffa600)",
   device_state: "var(--info-color, #039be5)",
   user_action: "var(--primary-color, #03a9f4)",
+  account: "#7e57c2",
+  system: "#607d8b",
   maintenance: "var(--secondary-text-color, #888)",
 };
 

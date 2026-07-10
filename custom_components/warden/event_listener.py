@@ -14,8 +14,13 @@ from typing import Any, Callable
 from homeassistant.const import EVENT_CALL_SERVICE, EVENT_STATE_CHANGED
 from homeassistant.core import Event, HomeAssistant, State
 
-from .const import CATEGORY_ACTION, CATEGORY_STATE
-from .storage import LogEvent, SecurityStorage
+from .const import CATEGORY_ACCOUNT, CATEGORY_ACTION, CATEGORY_STATE
+from .storage import LogEvent
+
+# HA's AuthManager fires these on the bus with data {"user_id": ...} (values
+# defined in homeassistant/auth/__init__.py; using the literal event names so
+# we match the bus regardless of where the constant lives).
+_USER_EVENT_TYPES = ("user_added", "user_updated", "user_removed")
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +61,33 @@ def setup_action_listener(
         enqueue(log_event)
 
     return hass.bus.async_listen(EVENT_CALL_SERVICE, _handle)
+
+
+def setup_account_listener(
+    hass: HomeAssistant,
+    enqueue: Callable[[LogEvent], None],
+) -> Callable[[], None]:
+    """Log user-account changes (created / updated / removed). Account
+    management is high-value audit material and low volume."""
+
+    def _handle(event: Event) -> None:
+        context = event.context
+        enqueue(
+            LogEvent(
+                category=CATEGORY_ACCOUNT,
+                event_type=event.event_type,  # user_added / user_updated / user_removed
+                user_id=event.data.get("user_id"),
+                data={"context_id": context.id if context else None},
+            )
+        )
+
+    unsubs = [hass.bus.async_listen(t, _handle) for t in _USER_EVENT_TYPES]
+
+    def _remove() -> None:
+        for unsub in unsubs:
+            unsub()
+
+    return _remove
 
 
 def setup_state_listener(

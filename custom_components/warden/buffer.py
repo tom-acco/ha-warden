@@ -99,6 +99,12 @@ class WriteBuffer:
                 exc,
             )
 
+    async def async_flush(self) -> None:
+        """Flush now, leaving the timer running. Used on HA stop, where a
+        normal shutdown does not call async_unload_entry - so without this the
+        last buffered events would be lost on every restart."""
+        await self._flush()
+
     async def async_shutdown(self) -> None:
         """Stop the timer and flush anything still buffered. Call on unload."""
         if self._unsub_timer is not None:

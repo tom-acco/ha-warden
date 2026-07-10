@@ -23,6 +23,7 @@ import voluptuous as vol
 from homeassistant.components import frontend, panel_custom
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EVENT_HOMEASSISTANT_STARTED, EVENT_HOMEASSISTANT_STOP
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
@@ -36,6 +37,7 @@ from .const import (
     AUTH_POLL_INTERVAL_SECONDS,
     CATEGORY_ANOMALY,
     CATEGORY_STATE,
+    CATEGORY_SYSTEM,
     CONF_ACTIVITY_RETENTION_DAYS,
     CONF_ANOMALY_ENABLED,
     CONF_ANOMALY_Z_THRESHOLD,
@@ -73,7 +75,11 @@ from .const import (
     SERVICE_QUERY_EVENTS,
     SERVICE_VERIFY_INTEGRITY,
 )
-from .event_listener import setup_action_listener, setup_state_listener
+from .event_listener import (
+    setup_account_listener,
+    setup_action_listener,
+    setup_state_listener,
+)
 from .history import reconstruct_hourly_observations
 from .storage import LogEvent, SecurityStorage
 from .websocket import async_register_websocket_commands
@@ -145,6 +151,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     unsub_listeners.append(setup_ban_log_capture(enqueue))
     unsub_listeners.append(await _async_setup_auth_polling(hass, enqueue))
+    unsub_listeners.append(setup_account_listener(hass, enqueue))
+    unsub_listeners.append(_setup_lifecycle_listeners(hass, enqueue, buffer))
 
     if anomaly_enabled:
         # Baselines are in-memory; warm them from persisted history so a
@@ -242,6 +250,34 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             globals_["panel"] = False
 
     return True
+
+
+def _setup_lifecycle_listeners(hass: HomeAssistant, enqueue, buffer: WriteBuffer):
+    """Log HA start/stop so the audit trail records its own gaps.
+
+    On stop we also flush the buffer: a normal HA shutdown does NOT call
+    async_unload_entry, so this is the buffer's only flush opportunity on a
+    restart - otherwise the last few seconds of events (and the stop event
+    itself) would be lost.
+    """
+    unsubs = []
+
+    def _on_start(_event) -> None:
+        enqueue(LogEvent(category=CATEGORY_SYSTEM, event_type="homeassistant_started"))
+
+    unsubs.append(hass.bus.async_listen(EVENT_HOMEASSISTANT_STARTED, _on_start))
+
+    async def _on_stop(_event) -> None:
+        enqueue(LogEvent(category=CATEGORY_SYSTEM, event_type="homeassistant_stop"))
+        await buffer.async_flush()
+
+    unsubs.append(hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _on_stop))
+
+    def _remove() -> None:
+        for unsub in unsubs:
+            unsub()
+
+    return _remove
 
 
 async def _async_setup_auth_polling(hass: HomeAssistant, enqueue):

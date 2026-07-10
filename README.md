@@ -23,6 +23,11 @@ Logbook doesn't give you.
   from HA's ban-log warnings (source IP, requested URL, user-agent);
   successful logins / new API tokens / sessions seen from a new IP are
   captured by polling refresh tokens (`auth_poller.py`).
+- **Account changes** - user accounts created / updated / removed
+  (`account` category), from HA's `user_added`/`updated`/`removed` events.
+- **System lifecycle** - HA start/stop (`system` category), so gaps in the
+  audit trail are themselves recorded. On stop the write buffer is flushed
+  so a restart doesn't drop the last few seconds of events.
 - **Anomaly detection** - a simple, explainable per-entity/per-hour
   frequency baseline that flags statistically unusual activity.
 - **Tamper-evident storage** - rows are hash-chained *per category*; a
