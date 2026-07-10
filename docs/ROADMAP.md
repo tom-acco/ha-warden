@@ -100,6 +100,18 @@ following it:
       (`websocket.py`). Stat tiles, filtered/paginated table, row detail, and
       integrity view. See `docs/PANEL.md`. Not yet exercised in a live HA;
       optional M5 (live tail/export) remains.
+- [x] **More hookable events (Tier 1).** User-account changes
+      (`user_added`/`updated`/`removed` -> `account` category) and HA
+      lifecycle (`homeassistant_started`/`stop` -> `system` category, which
+      also flushes the write buffer on shutdown). Both in the security
+      retention tier.
+- [ ] **More hookable events (Tier 2).** Config-change audit trail:
+      integration added/removed (no single bus event - watch
+      `EVENT_COMPONENT_LOADED`/config-entries) and entity/device registry
+      changes (`EVENT_ENTITY_REGISTRY_UPDATED`/`DEVICE_REGISTRY_UPDATED`,
+      logging create/remove, skipping noisy `update`). Deliberately NOT
+      hooking automation/script firing (volume) or presence-as-auth
+      (misleading).
 - [ ] Per-user notification rules (e.g. "notify me only for anomalies on
       exterior door sensors", "notify me for any failed auth from a new
       IP").

@@ -101,10 +101,14 @@ a time interval is reached, whichever comes first.
 The cost is **durability**: events sitting in the buffer are lost if the
 process is hard-killed before a flush. For a security log that's a real
 tradeoff, so it's bounded deliberately - a short default flush interval, a
-count trigger, and a flush on unload - rather than left open-ended. Both
-thresholds are configurable, so an operator can trade latency for durability
-(flush every event) or the reverse. The batch still chains each event
-correctly per category because the write is one serialized transaction.
+count trigger, a flush on unload, **and a flush on `EVENT_HOMEASSISTANT_STOP`**
+- rather than left open-ended. The stop flush matters more than it looks: a
+normal HA shutdown does *not* call `async_unload_entry`, so without a stop
+listener the buffer would never flush on a restart and the last few seconds
+of events would be lost every time. Both thresholds are configurable, so an
+operator can trade latency for durability (flush every event) or the reverse.
+The batch still chains each event correctly per category because the write is
+one serialized transaction.
 
 ## Why we don't log credential contents
 
