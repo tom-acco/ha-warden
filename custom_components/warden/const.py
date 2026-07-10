@@ -35,6 +35,11 @@ DEFAULT_BUFFER_FLUSH_SECONDS = 5
 # hour-of-day bucket while bounding the reconstruction scan.
 ANOMALY_HISTORY_LOOKBACK_DAYS = 30
 
+# How often to poll refresh tokens for successful-auth capture (see
+# auth_poller.py). Login-detection latency is bounded by this; 60s is a fine
+# tradeoff for a home and the poll is cheap.
+AUTH_POLL_INTERVAL_SECONDS = 60
+
 # --- Internal hass.data keys -------------------------------------------------
 DATA_STORAGE = "storage"
 DATA_BUFFER = "buffer"

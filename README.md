@@ -19,8 +19,10 @@ Logbook doesn't give you.
 - **Device state logging** - state changes for entities you configure
   (by domain, e.g. `lock`, `alarm_control_panel`, or device_class, e.g.
   `door`, `window`, `motion`) are logged with before/after state.
-- **Failed auth attempts** - captured by attaching a log handler to HA's
-  existing ban-log warnings, giving you source IP and requested URL.
+- **Auth attempts, failed and successful** - failed logins are captured
+  from HA's ban-log warnings (source IP, requested URL, user-agent);
+  successful logins / new API tokens / sessions seen from a new IP are
+  captured by polling refresh tokens (`auth_poller.py`).
 - **Anomaly detection** - a simple, explainable per-entity/per-hour
   frequency baseline that flags statistically unusual activity.
 - **Tamper-evident storage** - rows are hash-chained *per category*; a
@@ -40,9 +42,10 @@ Logbook doesn't give you.
 
 ## What this does NOT do yet
 
-- **Successful login capture.** HA doesn't expose this today without
-  deeper hooks into the auth provider. This is flagged explicitly in
-  `auth_listener.py` and tracked as a Phase 2 item - don't assume it works.
+- **Instant/exact successful-login capture.** Successful logins *are*
+  captured, but by polling refresh tokens (`auth_poller.py`) - so it's
+  session/token *issuance*, with the source IP arriving on first use and
+  up-to-a-minute latency, not an at-the-moment hook. See `docs/ARCHITECTURE.md`.
 - Long-term archival/export tooling beyond the raw SQLite file (the panel's
   export is still a "later" item - see `docs/PANEL.md`).
 
@@ -60,6 +63,7 @@ custom_components/warden/   The actual HA integration
   history.py            Rebuilds anomaly baselines from the log on startup
   event_listener.py    Service-call + state-change listeners (user actions, device state)
   auth_listener.py      Failed-auth capture via HA's ban logger
+  auth_poller.py        Successful-auth capture via refresh-token polling
   websocket.py          Admin-only WebSocket API backing the panel
   panel/warden-panel.js  Sidebar panel web component (no build step)
   sensor.py              Rolling 24h count sensors + Recent Events sensor

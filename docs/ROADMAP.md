@@ -83,24 +83,17 @@ following it:
 
 ## Phase 2 - close the known functionality gaps
 
-- [ ] **Successful-login capture.** The single biggest functionality gap
-      versus the original ask ("auth attempts, both failed and
-      successful"). Investigated 2026-07 (see ARCHITECTURE.md and
-      `auth_listener.py`): HA fires no login/token bus event and has no
-      usable in-process success log, so the recommended approach is to
-      **poll refresh tokens** (`hass.auth.async_get_users()` ->
-      `User.refresh_tokens`; RefreshToken carries user / client_name /
-      token_type / created_at / last_used_at / last_used_ip). Log: new
-      `normal` token = session established, new `long_lived_access_token` =
-      API token minted, known token used from a new `last_used_ip` =
-      activity from a new location. The auth-provider `async_validate_login`
-      hook (`AuthProviderHookNotImplemented`) is retained only as an
-      optional "instant/exact" enhancement - it's more precise but
-      monkeypatches private internals, so it's not the primary path.
-- [ ] **Capture the user-agent on failed logins.** The ban-log WARNING now
-      ends with "({user_agent})"; `CURRENT_BAN_MSG_RE` still matches (it
-      stops at the URL) but drops that fingerprint. Extend the regex to
-      capture it.
+- [x] **Successful-login capture.** Implemented via refresh-token polling
+      (`auth_poller.py`): a snapshot diff emits `session_started`,
+      `long_lived_token_created`, and `session_new_ip` events (outcome
+      `success`), seeded silently on startup. Closes the biggest gap versus
+      the original ask ("auth attempts, both failed and successful"). The
+      auth-provider `async_validate_login` hook
+      (`AuthProviderHookNotImplemented`) remains an optional "instant/exact"
+      enhancement. Not yet exercised in a live HA.
+- [x] **Capture the user-agent on failed logins.** `CURRENT_BAN_MSG_RE` now
+      has a 4th group for the trailing "({user_agent})"; stored under
+      `data.user_agent`. Verified against a live 2026.5 capture.
 - [x] Dedicated frontend panel (sidebar item) with a searchable/filterable
       timeline — implemented (M1–M4) as a no-build vanilla web-component panel
       (`panel/warden-panel.js`) over an admin-only WebSocket API

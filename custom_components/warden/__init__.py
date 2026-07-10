@@ -30,8 +30,10 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .anomaly import AnomalyEngine
 from .auth_listener import setup_ban_log_capture
+from .auth_poller import AuthTokenTracker, async_poll as async_poll_auth
 from .buffer import WriteBuffer
 from .const import (
+    AUTH_POLL_INTERVAL_SECONDS,
     CATEGORY_ANOMALY,
     CATEGORY_STATE,
     CONF_ACTIVITY_RETENTION_DAYS,
@@ -142,6 +144,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
     )
     unsub_listeners.append(setup_ban_log_capture(enqueue))
+    unsub_listeners.append(await _async_setup_auth_polling(hass, enqueue))
 
     if anomaly_enabled:
         # Baselines are in-memory; warm them from persisted history so a
@@ -239,6 +242,22 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             globals_["panel"] = False
 
     return True
+
+
+async def _async_setup_auth_polling(hass: HomeAssistant, enqueue):
+    """Capture successful logins by polling refresh tokens. The initial poll
+    seeds a silent baseline (existing sessions aren't re-logged); the interval
+    then catches new sessions, new long-lived tokens, and known tokens used
+    from a new IP. See auth_poller.py / docs/ARCHITECTURE.md."""
+    tracker = AuthTokenTracker()
+    await async_poll_auth(hass, tracker, enqueue)  # baseline; emits nothing
+
+    async def _tick(_now) -> None:
+        await async_poll_auth(hass, tracker, enqueue)
+
+    return async_track_time_interval(
+        hass, _tick, timedelta(seconds=AUTH_POLL_INTERVAL_SECONDS)
+    )
 
 
 def _setup_anomaly_polling(hass, storage: SecurityStorage, engine: AnomalyEngine, enqueue):

@@ -19,9 +19,9 @@ either failed or successful login attempts. What exists today:
     so it still matches, but the user-agent is a useful fingerprint we're
     currently dropping - see ROADMAP Phase 2.
 
-  * SUCCESSFUL logins: still not implemented, but the original plan here
-    (hook the auth provider) is NOT the recommended path. Verified against
-    HA dev, 2026-07:
+  * SUCCESSFUL logins: now captured by polling refresh tokens - see
+    auth_poller.py. The original plan here (hook the auth provider) was NOT
+    the path taken; the reasoning, verified against HA 2026-07, is below.
       - `homeassistant.components.http.ban.process_success_login` logs only
         at DEBUG and carries no user identity - not a usable scrape target.
       - `homeassistant.components.auth.login_flow` is where success actually
@@ -49,7 +49,7 @@ either failed or successful login attempts. What exists today:
     session activity from a new location. This measures session/token
     issuance rather than per-request logins (source IP arrives on first
     use, latency bounded by the poll interval), which is honest and
-    sufficient. Tracked as Phase 2 in docs/ROADMAP.md.
+    sufficient. Implemented in auth_poller.py.
 
 Deliberately NOT captured: raw password contents. Only whether an attempt
 succeeded/failed, the username presented (not the password), and source IP
@@ -67,13 +67,18 @@ from typing import Callable
 from .const import AUTH_FAILURE, CATEGORY_AUTH, HA_BAN_LOGGER_NAME
 from .storage import LogEvent
 
-# Matches: "Login attempt or request with invalid authentication from
-# 192.168.1.5 (192.168.1.5). Requested URL: '/api/...'"
-# Re-verify this against the HA version you support - see module docstring.
+# Matches (HA 2026.x, verified against a live 2026.5 capture):
+#   "Login attempt or request with invalid authentication from
+#    10.1.102.50 (10.1.102.50). Requested URL: '/auth/login_flow/...'.
+#    (Mozilla/5.0 ... Chrome/150.0.0.0 Safari/537.36)"
+# Groups: 1=source ip, 3=requested url, 4=user-agent (the trailing parenthesised
+# UA is newer than the original format; the greedy .+ before \) captures it
+# including its own inner parens). Re-verify against the HA version you target.
 CURRENT_BAN_MSG_RE = re.compile(
     r"invalid authentication from ([0-9a-fA-F:.]+)"
     r"(?:\s*\(([0-9a-fA-F:.]+)\))?"
     r"(?:\.\s*Requested URL:\s*'([^']+)')?"
+    r"(?:\.\s*\((.+)\))?"
 )
 
 
@@ -97,6 +102,7 @@ class BanLogHandler(logging.Handler):
 
         source_ip = match.group(1)
         requested_url = match.group(3)
+        user_agent = match.group(4)
 
         event = LogEvent(
             category=CATEGORY_AUTH,
@@ -105,6 +111,7 @@ class BanLogHandler(logging.Handler):
             outcome=AUTH_FAILURE,
             data={
                 "requested_url": requested_url,
+                "user_agent": user_agent,
                 "raw_message": message,
             },
         )

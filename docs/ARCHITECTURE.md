@@ -161,10 +161,10 @@ when that breaks:
   arguably the right long-term fix, and something worth doing regardless
   since it would benefit everyone building on this, not just this project.
 
-## Why successful-login capture is *not* implemented (yet)
+## Why successful-login capture polls refresh tokens
 
 There is no bus event or usable log line for successful logins today
-(verified against HA dev, 2026-07):
+(verified against HA 2026-07):
 
 - `homeassistant.components.http.ban.process_success_login` logs only at
   DEBUG and carries no user identity.
@@ -199,10 +199,18 @@ authentication, and would be actively misleading in a security log):
    use, latency bounded by the poll interval) rather than per-request
    logins.
 
-Option 2 is the recommended path; option 1 is retained only as an optional
-"instant/exact" enhancement. Left unimplemented for now, with the gap
-visible in code (`AuthProviderHookNotImplemented`) - see docs/ROADMAP.md
-Phase 2.
+**Option 2 is what's implemented** (`auth_poller.py`): an `AuthTokenTracker`
+diffs successive token snapshots, seeding a silent baseline on startup (so a
+restart doesn't re-log every current session) and then emitting
+`session_started` / `long_lived_token_created` / `session_new_ip` events. The
+diff logic is HA-free and unit-tested; only the snapshot fetch touches
+`hass.auth`. Option 1 (the `AuthProviderHookNotImplemented` stub) is retained
+only as a possible future "instant/exact" enhancement.
+
+Known gaps, inherent to polling and documented rather than hidden: a login
+during HA downtime isn't retroactively logged (the next startup re-baselines),
+and the source IP is whatever the token was *last used from*, populated on
+first use - so it can lag the login itself by up to the poll interval.
 
 ## Why anomaly detection is a z-score baseline, not ML
 
