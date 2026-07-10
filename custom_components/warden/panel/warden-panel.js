@@ -191,9 +191,25 @@ class WardenPanel extends HTMLElement {
           border-radius:12px; padding:12px 14px; margin-bottom:16px; }
         .verify-head { font-weight:600; margin-bottom:8px; display:flex; align-items:center; gap:8px; }
         table.mini th, table.mini td { border-bottom:none; padding:4px 10px; }
+        .tablewrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+        button.icon { border:none; background:none; font-size:20px; line-height:1; padding:4px 8px; }
+        @media (max-width:600px) {
+          .wrap { padding:10px; }
+          h1 { font-size:17px; }
+          header { flex-wrap:wrap; gap:6px; }
+          .tiles { grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+          .tile { padding:10px 12px; }
+          .tile .n { font-size:22px; }
+          .filters { flex-direction:column; align-items:stretch; }
+          .filters select, .filters input, .filters button { width:100%; box-sizing:border-box; }
+          th, td { padding:6px 8px; font-size:12px; }
+          /* Keep the essentials; User + Outcome are still in the row detail. */
+          th:nth-child(5), td:nth-child(5), th:nth-child(6), td:nth-child(6) { display:none; }
+        }
       </style>
       <div class="wrap">
         <header>
+          <button id="menuBtn" class="icon" title="Toggle sidebar" aria-label="Toggle sidebar">☰</button>
           <h1>🛡 Warden</h1>
           <div class="spacer"></div>
           <button id="verifyBtn">Verify integrity</button>
@@ -214,12 +230,14 @@ class WardenPanel extends HTMLElement {
           <button id="applyBtn">Filter</button>
           <button id="clearBtn">Clear</button>
         </div>
-        <table>
-          <thead><tr>
-            <th>Time</th><th>Category</th><th>Type</th><th>Entity</th><th>User</th><th>Outcome</th>
-          </tr></thead>
-          <tbody id="tbody"></tbody>
-        </table>
+        <div class="tablewrap">
+          <table>
+            <thead><tr>
+              <th>Time</th><th>Category</th><th>Action</th><th>Target</th><th>User</th><th>Outcome</th>
+            </tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
         <div class="pager">
           <span class="info" id="pageInfo"></span>
           <button id="prevBtn">‹ Prev</button>
@@ -228,6 +246,8 @@ class WardenPanel extends HTMLElement {
       </div>`;
 
     const $ = (id) => this.shadowRoot.getElementById(id);
+    $("menuBtn").onclick = () =>
+      this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true }));
     $("verifyBtn").onclick = () => this._verify();
     $("refreshBtn").onclick = () => this._refresh();
     $("applyBtn").onclick = () => this._applyFilters();
@@ -276,6 +296,33 @@ class WardenPanel extends HTMLElement {
     this._renderTable();
   }
 
+  // Context-aware column values: a raw "user_action / call_service" row
+  // carries no info in its own columns, but the useful bits are in `domain`,
+  // `data.service`, `data.new_state`, `service_data`, or `source_ip`.
+  _describe(e) {
+    const d = e.data || {};
+    if (e.event_type === "call_service") {
+      return e.domain && d.service ? `${e.domain}.${d.service}` : (d.service || "call_service");
+    }
+    if (e.event_type === "state_changed" && d.new_state != null) {
+      return `→ ${d.new_state}`;
+    }
+    return e.event_type || "";
+  }
+
+  _target(e) {
+    if (e.entity_id) return e.entity_id;
+    if (e.source_ip) return e.source_ip;
+    const sd = (e.data && e.data.service_data) || {};
+    let t = sd.entity_id || (sd.target && sd.target.entity_id);
+    if (Array.isArray(t)) t = t.join(", ");
+    return t || "—";
+  }
+
+  _userLabel(e) {
+    return e.user_name || (e.user_id ? e.user_id.slice(-8) : "—");
+  }
+
   _renderTiles() {
     const s = this._state.stats;
     const tile = (n, l) => `<div class="tile"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`;
@@ -297,19 +344,20 @@ class WardenPanel extends HTMLElement {
       const dot = `<span class="dot" style="background:${CATEGORY_COLOR[e.category] || "#999"}"></span>`;
       const outcome = e.outcome === "failure"
         ? `<span style="color:var(--error-color,#db4437)">failure</span>`
-        : esc(e.outcome || "");
+        : esc(e.outcome || "—");
       const row = `
         <tr class="row" data-id="${e.id}">
           <td class="mono">${esc(fmtTime(e.ts))}</td>
           <td>${dot}${esc(e.category)}</td>
-          <td>${esc(e.event_type)}</td>
-          <td class="mono">${esc(e.entity_id || "—")}</td>
-          <td class="mono">${esc(e.user_id ? e.user_id.slice(-8) : "—")}</td>
+          <td class="mono">${esc(this._describe(e))}</td>
+          <td class="mono">${esc(this._target(e))}</td>
+          <td>${esc(this._userLabel(e))}</td>
           <td>${outcome}</td>
         </tr>`;
       if (s.expanded !== e.id) return row;
       const detail = {
-        entity_id: e.entity_id, user_id: e.user_id, source_ip: e.source_ip,
+        action: this._describe(e), target: this._target(e),
+        user: e.user_name || e.user_id, source_ip: e.source_ip,
         domain: e.domain, outcome: e.outcome, data: e.data,
       };
       return row + `

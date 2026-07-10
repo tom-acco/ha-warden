@@ -51,7 +51,7 @@ PANEL_STATIC_URL = "/warden_static"
 PANEL_JS_FILENAME = "warden-panel.js"
 PANEL_WEBCOMPONENT = "warden-panel"
 # Bump when panel/warden-panel.js changes, to bust the browser cache.
-PANEL_ASSET_VERSION = "0.1.2"
+PANEL_ASSET_VERSION = "0.1.3"
 
 # --- Event categories stored in the log table -------------------------------
 CATEGORY_AUTH = "auth_attempt"

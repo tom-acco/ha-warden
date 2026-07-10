@@ -116,12 +116,26 @@ async def ws_query(
         until=msg.get("until"),
     )
 
-    def _run() -> dict[str, Any]:
-        events = storage.query(limit=limit, offset=offset, **filters)
-        total = storage.count(**filters)
-        return {"events": events, "total": total, "limit": limit, "offset": offset}
+    def _run() -> tuple[list[dict[str, Any]], int]:
+        return (
+            storage.query(limit=limit, offset=offset, **filters),
+            storage.count(**filters),
+        )
 
-    connection.send_result(msg["id"], await hass.async_add_executor_job(_run))
+    events, total = await hass.async_add_executor_job(_run)
+
+    # Resolve user_id -> display name so the panel can show who did something
+    # rather than an opaque UUID. Cheap (few users); only when a page has any.
+    if any(e.get("user_id") for e in events):
+        names = {u.id: u.name for u in await hass.auth.async_get_users()}
+        for event in events:
+            uid = event.get("user_id")
+            if uid:
+                event["user_name"] = names.get(uid)
+
+    connection.send_result(
+        msg["id"], {"events": events, "total": total, "limit": limit, "offset": offset}
+    )
 
 
 @websocket_api.require_admin
