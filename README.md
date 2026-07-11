@@ -26,8 +26,8 @@ Logbook doesn't give you.
   tokens (`auth_poller.py`).
 - **Backup create/restore** and **core config changes** - backups (config
   exfiltration / restore-to-cover-tracks) via the backup manager's event
-  stream, and `core_config_updated` (location / URL / units), both under the
-  `system` category.
+  stream, including create *failures*, and `core_config_updated` (location /
+  URL / units), both under the `system` category.
 - **Account changes** - user accounts created / updated / removed
   (`account` category), from HA's `user_added`/`updated`/`removed` events.
 - **System lifecycle** - HA start/stop (`system` category), so gaps in the
